@@ -1,0 +1,417 @@
+:root {
+  --player-color: #9b51e0;
+  --enemy-color: #f2a33c;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #101018;
+  font-family: "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  user-select: none;
+}
+
+#game-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 准星 */
+#crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  transition: transform 0.08s ease;
+}
+#crosshair.hit {
+  transform: translate(-50%, -50%) scale(1.45);
+}
+#crosshair::before,
+#crosshair::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+}
+#crosshair::before {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+#crosshair::after {
+  top: 50%;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  transform: translateY(-50%);
+}
+
+/* 血条 */
+#hp-tank {
+  position: absolute;
+  left: 24px;
+  bottom: 96px;
+  width: 220px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+#hp-bar {
+  height: 100%;
+  width: 100%;
+  background: #4cd964;
+  border-radius: 4px;
+  transition: width 0.1s linear;
+}
+#hp-bar.low {
+  background: #f75c4c;
+}
+
+/* 倒地重生提示 */
+#respawn-msg {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-shadow: 0 0 18px var(--enemy-color), 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+#respawn-msg.hidden {
+  display: none;
+}
+
+/* 墨水槽 */
+#ink-tank {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  width: 220px;
+  height: 26px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+#ink-bar {
+  height: 100%;
+  width: 100%;
+  background: var(--player-color);
+  border-radius: 11px;
+  transition: width 0.08s linear;
+}
+#ink-bar.low {
+  background: linear-gradient(90deg, #d0342c, #f75c4c);
+}
+#ink-label {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* 形态徽章 */
+#form-badge {
+  position: absolute;
+  left: 24px;
+  bottom: 62px;
+  padding: 4px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+#form-badge.human {
+  background: var(--player-color);
+}
+#form-badge.squid {
+  background: rgba(46, 204, 113, 0.85);
+}
+
+/* 操作提示 */
+#controls-hint {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  line-height: 1.7;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#controls-hint b {
+  color: #fff;
+}
+
+/* 小地图 */
+#minimap {
+  position: absolute;
+  top: 18px;
+  left: 24px;
+  width: 160px;
+  height: 160px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0.92;
+}
+
+/* 当前难度徽章 */
+#difficulty-badge {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+#difficulty-badge.flash {
+  animation: diff-flash 0.6s ease;
+}
+@keyframes diff-flash {
+  0% {
+    background: rgba(155, 81, 224, 0.9);
+    transform: scale(1.15);
+  }
+  100% {
+    background: rgba(0, 0, 0, 0.45);
+    transform: scale(1);
+  }
+}
+
+/* 对战计时器 */
+#match-timer {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+#match-timer.urgent {
+  color: #f75c4c;
+}
+
+/* 覆盖率条：紫 | 未涂 | 橙 */
+#coverage {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  height: 14px;
+  display: flex;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.4);
+}
+#cov-player {
+  background: var(--player-color);
+  transition: flex-grow 0.2s linear;
+}
+#cov-neutral {
+  background: transparent;
+  transition: flex-grow 0.2s linear;
+}
+#cov-enemy {
+  background: var(--enemy-color);
+  transition: flex-grow 0.2s linear;
+}
+
+/* ---------- 结算覆盖层 ---------- */
+#result-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 20, 0.8);
+  backdrop-filter: blur(5px);
+}
+#result-overlay.hidden {
+  display: none;
+}
+#result-overlay .panel {
+  text-align: center;
+  color: #fff;
+}
+#result-overlay h1 {
+  font-size: 56px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  margin-bottom: 14px;
+}
+#result-overlay h1.win {
+  color: var(--player-color);
+  text-shadow: 0 0 24px var(--player-color);
+}
+#result-overlay h1.lose {
+  color: var(--enemy-color);
+  text-shadow: 0 0 24px var(--enemy-color);
+}
+#result-score {
+  font-size: 20px;
+  margin-bottom: 26px;
+}
+#restart-btn {
+  padding: 12px 36px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #fff;
+  background: #9b51e0;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+#restart-btn:hover {
+  background: #7b2ff7;
+  transform: scale(1.05);
+}
+
+/* ---------- 开始覆盖层 ---------- */
+#start-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 20, 0.72);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  transition: opacity 0.25s ease;
+}
+#start-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+#start-overlay .panel {
+  text-align: center;
+  color: #fff;
+}
+#start-overlay h1 {
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: #9b51e0;
+  text-shadow: 0 0 24px rgba(155, 81, 224, 0.65);
+  margin-bottom: 16px;
+}
+#start-overlay p {
+  font-size: 18px;
+}
+#start-overlay .sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* 选项行（语言 / 难度） */
+.option-row {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.option-row .label {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.65);
+  margin-right: 4px;
+  min-width: 64px;
+  text-align: right;
+}
+.opt-btn {
+  padding: 8px 22px;
+  font-size: 15px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.opt-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.opt-btn.selected {
+  background: #9b51e0;
+  border-color: #9b51e0;
+  color: #fff;
+  box-shadow: 0 0 14px rgba(155, 81, 224, 0.55);
+}
+#difficulty-select {
+  margin-bottom: 22px;
+}
+
+/* 墨色选择 */
+.color-row .swatches {
+  display: flex;
+  gap: 8px;
+}
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.swatch:hover {
+  transform: scale(1.18);
+}
+.swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.75);
+  transform: scale(1.12);
+}

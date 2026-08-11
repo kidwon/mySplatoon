@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Splatoon — Web MVP</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD 覆盖层 -->
+    <div id="hud">
+      <div id="crosshair"></div>
+
+      <div id="match-timer">3:00</div>
+
+      <canvas id="minimap" width="160" height="160"></canvas>
+
+      <div id="coverage">
+        <div id="cov-player"></div>
+        <div id="cov-neutral"></div>
+        <div id="cov-enemy"></div>
+      </div>
+
+      <div id="hp-tank">
+        <div id="hp-bar"></div>
+      </div>
+
+      <div id="ink-tank">
+        <div id="ink-bar"></div>
+        <span id="ink-label">100</span>
+      </div>
+
+      <div id="respawn-msg" class="hidden"></div>
+
+      <div id="form-badge" class="human">HUMAN</div>
+
+      <div id="difficulty-badge"></div>
+
+      <div id="controls-hint">
+        <p data-i18n-html="controls1"></p>
+        <p data-i18n-html="controls2"></p>
+        <p data-i18n-html="controls3"></p>
+        <p data-i18n-html="controls4"></p>
+      </div>
+    </div>
+
+    <!-- 对战结算 -->
+    <div id="result-overlay" class="hidden">
+      <div class="panel">
+        <h1 id="result-title">FINISH!</h1>
+        <p id="result-score"></p>
+        <button id="restart-btn" data-i18n="restart"></button>
+      </div>
+    </div>
+
+    <!-- 未锁定鼠标时的开始提示 -->
+    <div id="start-overlay">
+      <div class="panel">
+        <h1>MY SPLATOON</h1>
+        <div id="lang-select" class="option-row">
+          <span class="label" data-i18n="language"></span>
+          <button class="opt-btn lang-btn" data-lang="zh">中文</button>
+          <button class="opt-btn lang-btn" data-lang="ja">日本語</button>
+          <button class="opt-btn lang-btn" data-lang="en">English</button>
+        </div>
+        <div class="option-row color-row">
+          <span class="label" data-i18n="yourColor"></span>
+          <span class="swatches" data-team="player"></span>
+        </div>
+        <div class="option-row color-row">
+          <span class="label" data-i18n="enemyColor"></span>
+          <span class="swatches" data-team="enemy"></span>
+        </div>
+        <div id="difficulty-select" class="option-row">
+          <span class="label" data-i18n="difficulty"></span>
+          <button class="opt-btn diff-btn" data-difficulty="easy" data-i18n="easy"></button>
+          <button class="opt-btn diff-btn selected" data-difficulty="normal" data-i18n="normal"></button>
+          <button class="opt-btn diff-btn" data-difficulty="hard" data-i18n="hard"></button>
+        </div>
+        <p data-i18n="clickToStart"></p>
+        <p class="sub" data-i18n="escHint"></p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
