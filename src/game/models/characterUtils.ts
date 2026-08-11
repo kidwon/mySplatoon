@@ -14,6 +14,9 @@ export function instantiateMaterials(model: THREE.Group): THREE.MeshStandardMate
         clone = obj.material.clone();
         clone.emissive = new THREE.Color(0xffffff);
         clone.emissiveIntensity = 0;
+        // 预置 transparent：运行时只改 opacity（纯 uniform）即可淡出。
+        // 运行时切换 transparent 需要 needsUpdate 重编译，否则不生效。
+        clone.transparent = true;
         cloneMap.set(obj.material, clone);
       }
       obj.material = clone;
@@ -37,6 +40,7 @@ export function addTeamScarf(
     roughness: 0.5,
     emissive: colorHex,
     emissiveIntensity: 0.15,
+    transparent: true, // 与角色一起淡出
   });
   const scarf = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.07, 10, 20), mat);
   scarf.name = 'team-scarf';

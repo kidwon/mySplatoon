@@ -226,7 +226,12 @@ class Game {
 
     if (active) {
       this.timeLeft -= dt;
-      this.player.update(dt, this.input, this.inkSystem);
+      this.player.update(
+        dt,
+        this.input,
+        this.inkSystem,
+        this.bot.alive ? this.bot.getPosition() : undefined
+      );
       this.bot.update(dt, {
         pos: this.player.getPosition(),
         alive: this.player.alive,

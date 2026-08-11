@@ -37,12 +37,23 @@ const FIRE_INTERVAL = 0.11; // 射击间隔（秒）
 // 视角参数
 const MOUSE_SENS = 0.0024;
 const CAM_DIST = 7;
+const SHOULDER_OFFSET = 0.75; // 肩上视角：相机支点向右肩偏移，角色让开屏幕中心
+const AIM_MAX_DIST = 40; // 准星射线最大瞄准距离
 const CAM_DIST_MIN = 0.8; // 吊臂最短收缩距离（不贴进角色脑袋）
 const CAM_MARGIN = 0.25; // 距遮挡面的安全间距
 const CAM_RECOVER_SPEED = 5; // 遮挡消失后弹回的速度
+const FADE_START_DIST = 3.2; // 吊臂短于此距离开始淡出角色
+const FADE_MIN_OPACITY = 0.25; // 淡出下限
+const FADE_PITCH_START = -0.7; // 俯角低于此开始淡出（低头涂脚下时大脑袋挡视线）
+const FADE_PITCH_MIN_OPACITY = 0.35; // 俯角淡出下限
+const FADE_OCCLUDE_RADIUS = 1.0; // 相机→对手视线距角色中心小于此半径视为挡住对手
+const FADE_OCCLUDE_OPACITY = 0.3; // 挡住对手时的淡出目标
+const FADE_OCCLUDE_SPEED = 8; // 该淡出的过渡速度
 const CAM_HEIGHT = 1.6;
 const PITCH_MIN = -1.15;
 const PITCH_MAX = 0.55;
+
+const UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * 玩家控制器：移动 / 跳跃 / 形态切换 / 射击 / 墨水槽 / 第三人称相机。
@@ -77,6 +88,14 @@ export class PlayerController implements HitTarget {
   private currentSpeed = 0;
   /** 相机吊臂当前长度（被遮挡时即时收缩，解除后平滑弹回） */
   private camDist = CAM_DIST;
+  /** 相机贴近时的角色淡出系数（1 = 不透明） */
+  private camFade = 1;
+  /** "挡住对手视线"淡出系数（平滑过渡） */
+  private occlFade = 1;
+  /** 对手位置（主循环每帧传入；null = 对手不在场） */
+  private enemyPos: THREE.Vector3 | null = null;
+  /** 武器全部材质（含非墨色部件，供整体淡出） */
+  private weaponMats: THREE.MeshStandardMaterial[] = [];
 
   private yaw = 0;
   private pitch = -0.25;
@@ -87,6 +106,12 @@ export class PlayerController implements HitTarget {
   // 复用的临时向量，避免每帧分配
   private tmpDir = new THREE.Vector3();
   private tmpMove = new THREE.Vector3();
+  private tmpRight = new THREE.Vector3();
+  private tmpPivot = new THREE.Vector3();
+  private tmpAim = new THREE.Vector3();
+  private tmpMuzzle = new THREE.Vector3();
+  private tmpVecA = new THREE.Vector3();
+  private tmpVecB = new THREE.Vector3();
   private tmpEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
   constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {
@@ -101,6 +126,16 @@ export class PlayerController implements HitTarget {
     attachWeapon(this.model, this.weapon);
     this.group.add(this.model);
     this.animator = new CharacterAnimator(this.model);
+
+    // 收集武器全部材质（本就按实例新建，无共享风险），并预置 transparent 供淡出
+    this.weapon.group.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshStandardMaterial) {
+        if (!this.weaponMats.includes(obj.material)) {
+          obj.material.transparent = true;
+          this.weaponMats.push(obj.material);
+        }
+      }
+    });
 
     this.group.position.set(0, 0, 18);
     scene.add(this.group);
@@ -173,7 +208,8 @@ export class PlayerController implements HitTarget {
     this.animator.reset();
   }
 
-  update(dt: number, input: Input, inkSystem: InkSystem) {
+  update(dt: number, input: Input, inkSystem: InkSystem, enemyPos?: THREE.Vector3) {
+    this.enemyPos = enemyPos ?? null;
     if (this.downed) {
       audio.setSwimming(false);
       this.respawnTimer -= dt;
@@ -227,14 +263,8 @@ export class PlayerController implements HitTarget {
       }
     }
 
-    // 潜入己方墨汁时半透明下沉的视觉反馈
-    const swimming = this.form === 'squid' && this.onOwnInk;
-    for (const mat of this.modelMats) {
-      mat.transparent = swimming;
-      mat.opacity = swimming ? 0.45 : 1;
-    }
-    this.scarfMat.transparent = swimming;
-    this.scarfMat.opacity = swimming ? 0.45 : 1;
+    // 透明度统一在 applyOpacity()（updateCamera 末尾）处理：
+    // 潜墨半透明 × 相机贴近淡出 两个因素合并
   }
 
   // ---------- 移动 ----------
@@ -298,6 +328,17 @@ export class PlayerController implements HitTarget {
     );
   }
 
+  /** 相机/准星共用的瞄准支点：头部高度 + 右肩偏移（限制在场内，防止被推进围墙） */
+  private aimPivot(out: THREE.Vector3): THREE.Vector3 {
+    out.copy(this.group.position);
+    out.y += CAM_HEIGHT;
+    this.tmpRight.set(1, 0, 0).applyAxisAngle(UP, this.yaw);
+    out.addScaledVector(this.tmpRight, SHOULDER_OFFSET);
+    out.x = THREE.MathUtils.clamp(out.x, -ARENA_HALF + 0.1, ARENA_HALF - 0.1);
+    out.z = THREE.MathUtils.clamp(out.z, -ARENA_HALF + 0.1, ARENA_HALF - 0.1);
+    return out;
+  }
+
   // ---------- 射击 ----------
   private updateShooting(dt: number, input: Input, inkSystem: InkSystem) {
     this.fireCooldown -= dt;
@@ -313,16 +354,28 @@ export class PlayerController implements HitTarget {
     this.fireCooldown = FIRE_INTERVAL;
     this.ink -= INK_SHOT_COST;
 
-    // 沿相机瞄准方向发射（yaw + pitch）
+    // 1) 准星射线求瞄准点：沿相机中心方向，取地面/障碍/最大射程中最近者
     this.tmpEuler.set(this.pitch, this.yaw, 0);
-    this.tmpDir.set(0, 0, -1).applyEuler(this.tmpEuler);
+    const forward = this.tmpDir.set(0, 0, -1).applyEuler(this.tmpEuler);
+    const pivot = this.aimPivot(this.tmpPivot);
 
-    const origin = this.group.position
-      .clone()
-      .add(new THREE.Vector3(0, 1.2, 0))
-      .addScaledVector(this.tmpDir, 0.7);
+    let aimDist = AIM_MAX_DIST;
+    if (forward.y < -1e-4) aimDist = Math.min(aimDist, pivot.y / -forward.y);
+    aimDist = Math.min(aimDist, cameraObstruction(pivot, forward, aimDist));
+    const aimPoint = this.tmpAim.copy(pivot).addScaledVector(forward, aimDist);
 
-    inkSystem.spawnBullet(origin, this.tmpDir, 'player');
+    // 2) 从武器枪口出弹，弹道向瞄准点收敛（muzzle-to-aimpoint）
+    this.weapon.group.updateWorldMatrix(true, false);
+    const muzzle = this.tmpMuzzle.set(0, 0.05, -0.38);
+    this.weapon.group.localToWorld(muzzle);
+
+    const shootDir = aimPoint.sub(muzzle);
+    if (shootDir.dot(forward) <= 0.05) {
+      // 瞄准点近到枪口之后（顶着墙）：退回相机方向直射
+      shootDir.copy(forward);
+    }
+
+    inkSystem.spawnBullet(muzzle, shootDir, 'player');
     audio.shoot();
   }
 
@@ -361,7 +414,8 @@ export class PlayerController implements HitTarget {
     // 相机在玩家背后：沿 +Z（背向）偏移
     this.tmpDir.set(0, 0, 1).applyEuler(this.tmpEuler);
 
-    const target = this.group.position.clone().add(new THREE.Vector3(0, CAM_HEIGHT, 0));
+    // 支点带右肩偏移：角色让到画面左下，准星视线不再被自己挡住
+    const target = this.aimPivot(this.tmpPivot);
 
     // 吊臂遮挡：即时收缩，解除后平滑弹回
     const clearDist = cameraObstruction(target, this.tmpDir, CAM_DIST);
@@ -377,5 +431,55 @@ export class PlayerController implements HitTarget {
 
     this.camera.position.copy(camPos);
     this.camera.lookAt(target);
+
+    // 淡出因素 1：吊臂被压缩得越短角色越透明（贴墙/贴掩体）
+    const distT = THREE.MathUtils.clamp(
+      (this.camDist - CAM_DIST_MIN) / (FADE_START_DIST - CAM_DIST_MIN),
+      0,
+      1
+    );
+    const distFade = FADE_MIN_OPACITY + (1 - FADE_MIN_OPACITY) * distT;
+
+    // 淡出因素 2：俯角越陡角色越透明（低头涂脚下时不被自己的头挡住）
+    const pitchT = THREE.MathUtils.clamp(
+      (this.pitch - PITCH_MIN) / (FADE_PITCH_START - PITCH_MIN),
+      0,
+      1
+    );
+    const pitchFade = FADE_PITCH_MIN_OPACITY + (1 - FADE_PITCH_MIN_OPACITY) * pitchT;
+
+    // 淡出因素 3：相机→对手的视线穿过自己角色（对手被自己挡住）
+    let occluding = false;
+    if (this.enemyPos) {
+      // 相机→对手方向与距离
+      const toEnemy = this.tmpVecB.copy(this.enemyPos);
+      toEnemy.y += 0.9;
+      toEnemy.sub(this.camera.position);
+      const enemyDist = toEnemy.length();
+      toEnemy.normalize();
+      // 角色身体中心到该视线的垂距
+      const camToBody = this.tmpVecA.copy(this.group.position);
+      camToBody.y += 0.9;
+      camToBody.sub(this.camera.position);
+      const tProj = camToBody.dot(toEnemy);
+      if (tProj > 0 && tProj < enemyDist) {
+        const perpSq = camToBody.lengthSq() - tProj * tProj;
+        occluding = perpSq < FADE_OCCLUDE_RADIUS * FADE_OCCLUDE_RADIUS;
+      }
+    }
+    const occlTarget = occluding ? FADE_OCCLUDE_OPACITY : 1;
+    this.occlFade += (occlTarget - this.occlFade) * Math.min(1, dt * FADE_OCCLUDE_SPEED);
+
+    this.camFade = Math.min(distFade, pitchFade, this.occlFade);
+    this.applyOpacity();
+  }
+
+  /** 合并两个透明度因素：潜墨半透明 × 相机贴近淡出（材质已预置 transparent，只改 opacity） */
+  private applyOpacity() {
+    const swimming = this.form === 'squid' && this.onOwnInk;
+    const opacity = (swimming ? 0.45 : 1) * this.camFade;
+    for (const mat of this.modelMats) mat.opacity = opacity;
+    this.scarfMat.opacity = opacity;
+    for (const mat of this.weaponMats) mat.opacity = opacity;
   }
 }
