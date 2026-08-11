@@ -56,6 +56,77 @@ export function resolveObstacleCollisions(pos: THREE.Vector3, radius: number) {
   }
 }
 
+interface Aabb {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** 相机遮挡检测用的 AABB 集合：全部障碍物 + 四面围墙（厚 1、高 2） */
+const CAMERA_BLOCKERS: Aabb[] = [
+  ...OBSTACLES.map((o) => ({
+    minX: o.cx - o.hx,
+    maxX: o.cx + o.hx,
+    minY: 0,
+    maxY: o.height,
+    minZ: o.cz - o.hz,
+    maxZ: o.cz + o.hz,
+  })),
+  { minX: -ARENA_HALF - 1, maxX: ARENA_HALF + 1, minY: 0, maxY: 2, minZ: -ARENA_HALF - 1, maxZ: -ARENA_HALF },
+  { minX: -ARENA_HALF - 1, maxX: ARENA_HALF + 1, minY: 0, maxY: 2, minZ: ARENA_HALF, maxZ: ARENA_HALF + 1 },
+  { minX: -ARENA_HALF - 1, maxX: -ARENA_HALF, minY: 0, maxY: 2, minZ: -ARENA_HALF - 1, maxZ: ARENA_HALF + 1 },
+  { minX: ARENA_HALF, maxX: ARENA_HALF + 1, minY: 0, maxY: 2, minZ: -ARENA_HALF - 1, maxZ: ARENA_HALF + 1 },
+];
+
+/** 射线 vs AABB（slab 法）：返回进入距离 t，未命中返回 null */
+function rayBoxEntry(
+  o: THREE.Vector3,
+  d: THREE.Vector3,
+  box: Aabb,
+  maxDist: number
+): number | null {
+  let tmin = 0;
+  let tmax = maxDist;
+  const axes: Array<[number, number, number, number]> = [
+    [o.x, d.x, box.minX, box.maxX],
+    [o.y, d.y, box.minY, box.maxY],
+    [o.z, d.z, box.minZ, box.maxZ],
+  ];
+  for (const [op, dp, mn, mx] of axes) {
+    if (Math.abs(dp) < 1e-8) {
+      if (op < mn || op > mx) return null;
+      continue;
+    }
+    let t1 = (mn - op) / dp;
+    let t2 = (mx - op) / dp;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return null;
+  }
+  return tmin;
+}
+
+/**
+ * 相机吊臂遮挡测距：从 origin 沿 dir 最多 maxDist，
+ * 返回不被任何障碍物/围墙遮挡的最大距离。
+ */
+export function cameraObstruction(
+  origin: THREE.Vector3,
+  dir: THREE.Vector3,
+  maxDist: number
+): number {
+  let nearest = maxDist;
+  for (const box of CAMERA_BLOCKERS) {
+    const t = rayBoxEntry(origin, dir, box, maxDist);
+    if (t !== null && t < nearest) nearest = t;
+  }
+  return nearest;
+}
+
 /** 视线检测：a、b 两点（视线高度 eyeY）之间是否被障碍物挡住 */
 export function segmentBlocked(
   ax: number,

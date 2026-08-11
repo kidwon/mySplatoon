@@ -5,7 +5,8 @@ import { audio } from './AudioManager';
 import { createHachiwareModel } from './models/chiikawa';
 import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
 import { createInkShooter, attachWeapon, WeaponBuild } from './models/weapons';
-import { ARENA_HALF, resolveObstacleCollisions } from './SceneManager';
+import { CharacterAnimator } from './models/CharacterAnimator';
+import { ARENA_HALF, resolveObstacleCollisions, cameraObstruction } from './SceneManager';
 
 export type PlayerForm = 'human' | 'squid';
 
@@ -36,6 +37,9 @@ const FIRE_INTERVAL = 0.11; // 射击间隔（秒）
 // 视角参数
 const MOUSE_SENS = 0.0024;
 const CAM_DIST = 7;
+const CAM_DIST_MIN = 0.8; // 吊臂最短收缩距离（不贴进角色脑袋）
+const CAM_MARGIN = 0.25; // 距遮挡面的安全间距
+const CAM_RECOVER_SPEED = 5; // 遮挡消失后弹回的速度
 const CAM_HEIGHT = 1.6;
 const PITCH_MIN = -1.15;
 const PITCH_MAX = 0.55;
@@ -68,6 +72,11 @@ export class PlayerController implements HitTarget {
   private modelMats: THREE.MeshStandardMaterial[];
   private scarfMat: THREE.MeshStandardMaterial;
   private weapon: WeaponBuild;
+  private animator: CharacterAnimator;
+  /** 本帧实际移动速度（供步行动画） */
+  private currentSpeed = 0;
+  /** 相机吊臂当前长度（被遮挡时即时收缩，解除后平滑弹回） */
+  private camDist = CAM_DIST;
 
   private yaw = 0;
   private pitch = -0.25;
@@ -91,6 +100,7 @@ export class PlayerController implements HitTarget {
     this.weapon = createInkShooter(DEFAULT_TEAM_COLORS.player);
     attachWeapon(this.model, this.weapon);
     this.group.add(this.model);
+    this.animator = new CharacterAnimator(this.model);
 
     this.group.position.set(0, 0, 18);
     scene.add(this.group);
@@ -139,6 +149,7 @@ export class PlayerController implements HitTarget {
     this.velocityY = 0;
     this.hp = HP_MAX;
     this.ink = INK_MAX;
+    this.animator.reset();
     audio.respawn();
   }
 
@@ -159,6 +170,7 @@ export class PlayerController implements HitTarget {
     this.form = 'human';
     this.model.scale.set(1, 1, 1);
     this.weapon.group.visible = true;
+    this.animator.reset();
   }
 
   update(dt: number, input: Input, inkSystem: InkSystem) {
@@ -166,7 +178,7 @@ export class PlayerController implements HitTarget {
       audio.setSwimming(false);
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) this.respawn();
-      this.updateCamera();
+      this.updateCamera(dt);
       return;
     }
 
@@ -176,7 +188,12 @@ export class PlayerController implements HitTarget {
     this.updateShooting(dt, input, inkSystem);
     this.updateInkTank(dt);
     this.updateHealth(dt);
-    this.updateCamera();
+    this.animator.update(dt, {
+      speed: this.currentSpeed,
+      grounded: this.grounded,
+      swimming: this.form === 'squid',
+    });
+    this.updateCamera(dt);
   }
 
   // ---------- 视角 ----------
@@ -236,6 +253,7 @@ export class PlayerController implements HitTarget {
       (input.moveBackward ? 1 : 0) - (input.moveForward ? 1 : 0)
     );
     const moving = this.tmpMove.lengthSq() > 0;
+    this.currentSpeed = moving ? speed : 0;
     if (moving) {
       this.tmpMove
         .normalize()
@@ -337,14 +355,24 @@ export class PlayerController implements HitTarget {
     for (const mat of this.modelMats) mat.emissiveIntensity = intensity;
   }
 
-  // ---------- 第三人称相机 ----------
-  private updateCamera() {
+  // ---------- 第三人称相机（含遮挡收缩） ----------
+  private updateCamera(dt: number) {
     this.tmpEuler.set(this.pitch, this.yaw, 0);
     // 相机在玩家背后：沿 +Z（背向）偏移
     this.tmpDir.set(0, 0, 1).applyEuler(this.tmpEuler);
 
     const target = this.group.position.clone().add(new THREE.Vector3(0, CAM_HEIGHT, 0));
-    const camPos = target.clone().addScaledVector(this.tmpDir, CAM_DIST);
+
+    // 吊臂遮挡：即时收缩，解除后平滑弹回
+    const clearDist = cameraObstruction(target, this.tmpDir, CAM_DIST);
+    const desired = Math.max(CAM_DIST_MIN, Math.min(CAM_DIST, clearDist - CAM_MARGIN));
+    if (desired < this.camDist) {
+      this.camDist = desired; // 被挡的当帧立刻拉近，避免穿模
+    } else {
+      this.camDist += (desired - this.camDist) * Math.min(1, dt * CAM_RECOVER_SPEED);
+    }
+
+    const camPos = target.clone().addScaledVector(this.tmpDir, this.camDist);
     camPos.y = Math.max(camPos.y, 0.4); // 不要穿到地面下
 
     this.camera.position.copy(camPos);

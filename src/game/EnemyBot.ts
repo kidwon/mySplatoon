@@ -3,6 +3,7 @@ import { InkSystem, DEFAULT_TEAM_COLORS, Team, HitTarget } from './InkSystem';
 import { createUsagiModel } from './models/chiikawa';
 import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
 import { createSlosherWasher, attachWeapon, WeaponBuild } from './models/weapons';
+import { CharacterAnimator } from './models/CharacterAnimator';
 import {
   ARENA_HALF,
   resolveObstacleCollisions,
@@ -74,6 +75,9 @@ export class EnemyBot implements HitTarget {
   private modelMats!: THREE.MeshStandardMaterial[];
   private scarfMat!: THREE.MeshStandardMaterial;
   private weapon!: WeaponBuild;
+  private animator!: CharacterAnimator;
+  /** 本帧移动速度（供步行动画） */
+  private moveSpeed = 0;
   private target = new THREE.Vector3();
   private retargetTimer = 0;
   private restTimer = 0;
@@ -93,6 +97,7 @@ export class EnemyBot implements HitTarget {
     this.weapon = createSlosherWasher(DEFAULT_TEAM_COLORS.enemy);
     attachWeapon(model, this.weapon);
     this.group.add(model);
+    this.animator = new CharacterAnimator(model);
 
     scene.add(this.group);
     this.setDifficulty(difficulty);
@@ -135,6 +140,7 @@ export class EnemyBot implements HitTarget {
     this.group.visible = true;
     this.group.position.set(0, 0, -18);
     this.hp = HP_MAX;
+    this.animator.reset();
     this.pickTarget();
   }
 
@@ -147,6 +153,7 @@ export class EnemyBot implements HitTarget {
     this.respawnTimer = 0;
     this.flashTimer = 0;
     this.group.visible = true;
+    this.animator.reset();
     this.pickTarget();
   }
 
@@ -176,6 +183,13 @@ export class EnemyBot implements HitTarget {
     }
     for (const m of this.modelMats) m.emissiveIntensity = flashIntensity;
 
+    this.moveSpeed = 0;
+    this.updateBehavior(dt, player);
+    this.animator.update(dt, { speed: this.moveSpeed, grounded: true });
+  }
+
+  /** 行为决策：休息 / 索敌反击 / 巡逻涂地（moveSpeed 由具体行为设置） */
+  private updateBehavior(dt: number, player?: PlayerInfo) {
     // 休息中：原地待机
     if (this.restTimer > 0) {
       this.restTimer -= dt;
@@ -221,6 +235,7 @@ export class EnemyBot implements HitTarget {
     this.tmpDir.normalize();
     this.group.position.addScaledVector(this.tmpDir, this.params.speed * dt);
     resolveObstacleCollisions(this.group.position, this.radius);
+    this.moveSpeed = this.params.speed;
     // 身体默认朝 -Z，转向行进方向
     this.group.rotation.y = Math.atan2(-this.tmpDir.x, -this.tmpDir.z);
 
@@ -252,6 +267,7 @@ export class EnemyBot implements HitTarget {
     if (dist > 6) {
       this.group.position.addScaledVector(this.tmpDir, this.params.speed * dt);
       resolveObstacleCollisions(this.group.position, this.radius);
+      this.moveSpeed = this.params.speed;
     }
 
     if (this.fireCooldown <= 0) {
