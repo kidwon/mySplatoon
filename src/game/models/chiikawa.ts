@@ -24,7 +24,6 @@ const COLORS = {
   usagiYellow: '#F2DC85',
   shisaTan: '#D9B380',
   shisaMane: '#8A5A33',
-  staffWood: '#9C7A4A',
   cheekPink: '#F4A7B5',
   eyeBlack: '#2B2B2B',
   mouthDark: '#5A3A38',
@@ -363,12 +362,12 @@ export function createHachiwareModel(): THREE.Group {
   return root;
 }
 
-/** うさぎ：黄兔，纯黄长立耳（微外弯）、竖椭圆眼、呐喊大张嘴、手持木棒 */
+/** うさぎ：黄兔，纯黄长立耳（微外弯）、竖椭圆眼、呐喊大张嘴 */
 export function createUsagiModel(): THREE.Group {
   const headR = 0.52;
   const headCY = 1.08;
   const neckY = headCY - headR * 0.6;
-  const { root, head, hand } = assemble('usagi', neckY, 0.48, new THREE.Vector3(0.42, 0.62, -0.12));
+  const { root, head } = assemble('usagi', neckY, 0.48, new THREE.Vector3(0.42, 0.62, -0.12));
   const cy = headCY - neckY;
 
   root.add(
@@ -390,14 +389,6 @@ export function createUsagiModel(): THREE.Group {
   addCheeks(head, { cy, headR });
   addOpenMouth(head, { cy, headR, big: true });
   addLimbs(root, { color: COLORS.usagiYellow, bodyY: 0.47, bodyR: 0.4, footScaleZ: 1.5, tailR: 0.11 });
-
-  // 木棒（ITEM_SLOT：挂在 handSocket 上，斜握横过身前）
-  const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.5, 8), mat(COLORS.staffWood));
-  staff.name = 'staff';
-  staff.rotation.z = 1.0;
-  staff.rotation.y = 0.35;
-  staff.castShadow = true;
-  hand.add(staff);
 
   return root;
 }

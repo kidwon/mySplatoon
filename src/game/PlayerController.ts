@@ -4,6 +4,7 @@ import { InkSystem, DEFAULT_TEAM_COLORS, Team, HitTarget } from './InkSystem';
 import { audio } from './AudioManager';
 import { createHachiwareModel } from './models/chiikawa';
 import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
+import { createInkShooter, attachWeapon, WeaponBuild } from './models/weapons';
 import { ARENA_HALF, resolveObstacleCollisions } from './SceneManager';
 
 export type PlayerForm = 'human' | 'squid';
@@ -66,6 +67,7 @@ export class PlayerController implements HitTarget {
   private model: THREE.Group;
   private modelMats: THREE.MeshStandardMaterial[];
   private scarfMat: THREE.MeshStandardMaterial;
+  private weapon: WeaponBuild;
 
   private yaw = 0;
   private pitch = -0.25;
@@ -85,16 +87,23 @@ export class PlayerController implements HitTarget {
     this.model = createHachiwareModel();
     this.modelMats = instantiateMaterials(this.model);
     this.scarfMat = addTeamScarf(this.model, 0.68, 0.38, DEFAULT_TEAM_COLORS.player);
+    // 墨枪与射击机制匹配（ハチワレ本命的墨辊等做了辊类武器机制再换回）
+    this.weapon = createInkShooter(DEFAULT_TEAM_COLORS.player);
+    attachWeapon(this.model, this.weapon);
     this.group.add(this.model);
 
     this.group.position.set(0, 0, 18);
     scene.add(this.group);
   }
 
-  /** 更换队伍墨色（体现在围巾上，不染角色本体） */
+  /** 更换队伍墨色（围巾 + 武器墨色部件，不染角色本体） */
   setColor(hex: string) {
     this.scarfMat.color.set(hex);
     this.scarfMat.emissive.set(hex);
+    for (const m of this.weapon.inkMats) {
+      m.color.set(hex);
+      m.emissive.set(hex);
+    }
   }
 
   // ---------- HitTarget ----------
@@ -149,6 +158,7 @@ export class PlayerController implements HitTarget {
     this.group.visible = true;
     this.form = 'human';
     this.model.scale.set(1, 1, 1);
+    this.weapon.group.visible = true;
   }
 
   update(dt: number, input: Input, inkSystem: InkSystem) {
@@ -191,10 +201,12 @@ export class PlayerController implements HitTarget {
     if (newForm !== this.form) {
       this.form = newForm;
       if (this.form === 'squid') {
-        // 整体压扁，模拟乌贼形态 & 缩小碰撞体积
+        // 整体压扁，模拟乌贼形态 & 缩小碰撞体积；武器收起
         this.model.scale.set(1.15, 0.34, 1.15);
+        this.weapon.group.visible = false;
       } else {
         this.model.scale.set(1, 1, 1);
+        this.weapon.group.visible = true;
       }
     }
 

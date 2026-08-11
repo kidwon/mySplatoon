@@ -1,5 +1,14 @@
 import * as THREE from 'three';
 import { CHIIKAWA_FACTORIES, ChiikawaCharacter } from './models/chiikawa';
+import { WEAPON_FACTORIES, attachWeapon } from './models/weapons';
+
+/** 展示台武器墨色（贴近参考图配色） */
+const SHOWCASE_INK: Record<ChiikawaCharacter, string> = {
+  chiikawa: '#58C24A',
+  hachiware: '#4A90D9',
+  usagi: '#69C25A',
+  shisa: '#4AC2B8',
+};
 
 /**
  * 角色模型展示台：在玩家出生点后方（z=22）陈列生成的角色，
@@ -23,6 +32,7 @@ export class ModelShowcase {
       const turntable = new THREE.Group();
       turntable.position.set(x, 0.3, 22);
       const model = CHIIKAWA_FACTORIES[key]();
+      attachWeapon(model, WEAPON_FACTORIES[key](SHOWCASE_INK[key]));
       turntable.add(model);
       scene.add(turntable);
       this.turntables.push(turntable);

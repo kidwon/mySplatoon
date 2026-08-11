@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { InkSystem, DEFAULT_TEAM_COLORS, Team, HitTarget } from './InkSystem';
 import { createUsagiModel } from './models/chiikawa';
 import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
+import { createSlosherWasher, attachWeapon, WeaponBuild } from './models/weapons';
 import {
   ARENA_HALF,
   resolveObstacleCollisions,
@@ -72,6 +73,7 @@ export class EnemyBot implements HitTarget {
   private params: BotParams = DIFFICULTY_PARAMS.normal;
   private modelMats!: THREE.MeshStandardMaterial[];
   private scarfMat!: THREE.MeshStandardMaterial;
+  private weapon!: WeaponBuild;
   private target = new THREE.Vector3();
   private retargetTimer = 0;
   private restTimer = 0;
@@ -84,10 +86,12 @@ export class EnemyBot implements HitTarget {
     private inkSystem: InkSystem,
     difficulty: BotDifficulty = 'normal'
   ) {
-    // うさぎ角色模型（持木棒），材质按实例克隆
+    // うさぎ角色模型（双手抱洗衣机泼桶），材质按实例克隆
     const model = createUsagiModel();
     this.modelMats = instantiateMaterials(model);
     this.scarfMat = addTeamScarf(model, 0.77, 0.36, DEFAULT_TEAM_COLORS.enemy);
+    this.weapon = createSlosherWasher(DEFAULT_TEAM_COLORS.enemy);
+    attachWeapon(model, this.weapon);
     this.group.add(model);
 
     scene.add(this.group);
@@ -99,10 +103,14 @@ export class EnemyBot implements HitTarget {
     this.params = DIFFICULTY_PARAMS[difficulty];
   }
 
-  /** 更换队伍墨色（体现在围巾上，不染角色本体） */
+  /** 更换队伍墨色（围巾 + 武器墨色部件，不染角色本体） */
   setColor(hex: string) {
     this.scarfMat.color.set(hex);
     this.scarfMat.emissive.set(hex);
+    for (const m of this.weapon.inkMats) {
+      m.color.set(hex);
+      m.emissive.set(hex);
+    }
   }
 
   // ---------- HitTarget ----------
