@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { InkSystem, DEFAULT_TEAM_COLORS, Team, HitTarget } from './InkSystem';
+import { createUsagiModel } from './models/chiikawa';
+import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
 import {
   ARENA_HALF,
   resolveObstacleCollisions,
@@ -68,7 +70,8 @@ export class EnemyBot implements HitTarget {
   private flashTimer = 0;
 
   private params: BotParams = DIFFICULTY_PARAMS.normal;
-  private bodyMat!: THREE.MeshStandardMaterial;
+  private modelMats!: THREE.MeshStandardMaterial[];
+  private scarfMat!: THREE.MeshStandardMaterial;
   private target = new THREE.Vector3();
   private retargetTimer = 0;
   private restTimer = 0;
@@ -81,25 +84,11 @@ export class EnemyBot implements HitTarget {
     private inkSystem: InkSystem,
     difficulty: BotDifficulty = 'normal'
   ) {
-    const mat = new THREE.MeshStandardMaterial({
-      color: DEFAULT_TEAM_COLORS.enemy,
-      roughness: 0.5,
-      emissive: 0xffffff,
-      emissiveIntensity: 0, // 受击时闪白
-    });
-    this.bodyMat = mat;
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.8, 6, 12), mat);
-    body.position.y = 0.8;
-    body.castShadow = true;
-    this.group.add(body);
-
-    const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.16, 0.4, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
-    );
-    nose.rotation.x = -Math.PI / 2;
-    nose.position.set(0, 1.1, -0.5);
-    this.group.add(nose);
+    // うさぎ角色模型（持木棒），材质按实例克隆
+    const model = createUsagiModel();
+    this.modelMats = instantiateMaterials(model);
+    this.scarfMat = addTeamScarf(model, 0.77, 0.36, DEFAULT_TEAM_COLORS.enemy);
+    this.group.add(model);
 
     scene.add(this.group);
     this.setDifficulty(difficulty);
@@ -110,9 +99,10 @@ export class EnemyBot implements HitTarget {
     this.params = DIFFICULTY_PARAMS[difficulty];
   }
 
-  /** 更换角色墨色 */
+  /** 更换队伍墨色（体现在围巾上，不染角色本体） */
   setColor(hex: string) {
-    this.bodyMat.color.set(hex);
+    this.scarfMat.color.set(hex);
+    this.scarfMat.emissive.set(hex);
   }
 
   // ---------- HitTarget ----------
@@ -171,12 +161,12 @@ export class EnemyBot implements HitTarget {
     }
 
     // 受击闪白衰减
+    let flashIntensity = 0;
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
-      this.bodyMat.emissiveIntensity = 1.5 * Math.max(this.flashTimer / HIT_FLASH_TIME, 0);
-    } else {
-      this.bodyMat.emissiveIntensity = 0;
+      flashIntensity = 1.5 * Math.max(this.flashTimer / HIT_FLASH_TIME, 0);
     }
+    for (const m of this.modelMats) m.emissiveIntensity = flashIntensity;
 
     // 休息中：原地待机
     if (this.restTimer > 0) {

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Input } from './Input';
 import { InkSystem, DEFAULT_TEAM_COLORS, Team, HitTarget } from './InkSystem';
 import { audio } from './AudioManager';
+import { createHachiwareModel } from './models/chiikawa';
+import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
 import { ARENA_HALF, resolveObstacleCollisions } from './SceneManager';
 
 export type PlayerForm = 'human' | 'squid';
@@ -61,8 +63,9 @@ export class PlayerController implements HitTarget {
     return this.yaw;
   }
 
-  private bodyMesh: THREE.Mesh;
-  private noseMesh: THREE.Mesh;
+  private model: THREE.Group;
+  private modelMats: THREE.MeshStandardMaterial[];
+  private scarfMat: THREE.MeshStandardMaterial;
 
   private yaw = 0;
   private pitch = -0.25;
@@ -78,35 +81,20 @@ export class PlayerController implements HitTarget {
   constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {
     this.group = new THREE.Group();
 
-    const mat = new THREE.MeshStandardMaterial({
-      color: DEFAULT_TEAM_COLORS.player,
-      roughness: 0.5,
-      emissive: 0xffffff,
-      emissiveIntensity: 0, // 受击时闪白
-    });
-
-    // 胶囊体身体（原点在脚底，身体中心上抬）
-    this.bodyMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.8, 6, 12), mat);
-    this.bodyMesh.position.y = 0.8;
-    this.bodyMesh.castShadow = true;
-    this.group.add(this.bodyMesh);
-
-    // “鼻子”：标记面朝方向
-    this.noseMesh = new THREE.Mesh(
-      new THREE.ConeGeometry(0.16, 0.4, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
-    );
-    this.noseMesh.rotation.x = -Math.PI / 2;
-    this.noseMesh.position.set(0, 1.1, -0.5);
-    this.group.add(this.noseMesh);
+    // ハチワレ角色模型（材质按实例克隆，受击闪白不影响其他同款模型）
+    this.model = createHachiwareModel();
+    this.modelMats = instantiateMaterials(this.model);
+    this.scarfMat = addTeamScarf(this.model, 0.68, 0.38, DEFAULT_TEAM_COLORS.player);
+    this.group.add(this.model);
 
     this.group.position.set(0, 0, 18);
     scene.add(this.group);
   }
 
-  /** 更换角色墨色 */
+  /** 更换队伍墨色（体现在围巾上，不染角色本体） */
   setColor(hex: string) {
-    (this.bodyMesh.material as THREE.MeshStandardMaterial).color.set(hex);
+    this.scarfMat.color.set(hex);
+    this.scarfMat.emissive.set(hex);
   }
 
   // ---------- HitTarget ----------
@@ -160,9 +148,7 @@ export class PlayerController implements HitTarget {
     this.flashTimer = 0;
     this.group.visible = true;
     this.form = 'human';
-    this.bodyMesh.scale.set(1, 1, 1);
-    this.bodyMesh.position.y = 0.8;
-    this.noseMesh.position.y = 1.1;
+    this.model.scale.set(1, 1, 1);
   }
 
   update(dt: number, input: Input, inkSystem: InkSystem) {
@@ -205,26 +191,21 @@ export class PlayerController implements HitTarget {
     if (newForm !== this.form) {
       this.form = newForm;
       if (this.form === 'squid') {
-        // 压扁身体，模拟乌贼形态 & 缩小碰撞体积
-        this.bodyMesh.scale.set(1.15, 0.32, 1.15);
-        this.bodyMesh.position.y = 0.28;
-        this.noseMesh.position.y = 0.35;
+        // 整体压扁，模拟乌贼形态 & 缩小碰撞体积
+        this.model.scale.set(1.15, 0.34, 1.15);
       } else {
-        this.bodyMesh.scale.set(1, 1, 1);
-        this.bodyMesh.position.y = 0.8;
-        this.noseMesh.position.y = 1.1;
+        this.model.scale.set(1, 1, 1);
       }
     }
 
     // 潜入己方墨汁时半透明下沉的视觉反馈
-    const mat = this.bodyMesh.material as THREE.MeshStandardMaterial;
-    if (this.form === 'squid' && this.onOwnInk) {
-      mat.transparent = true;
-      mat.opacity = 0.45;
-    } else {
-      mat.transparent = false;
-      mat.opacity = 1;
+    const swimming = this.form === 'squid' && this.onOwnInk;
+    for (const mat of this.modelMats) {
+      mat.transparent = swimming;
+      mat.opacity = swimming ? 0.45 : 1;
     }
+    this.scarfMat.transparent = swimming;
+    this.scarfMat.opacity = swimming ? 0.45 : 1;
   }
 
   // ---------- 移动 ----------
@@ -336,13 +317,12 @@ export class PlayerController implements HitTarget {
       this.hp = Math.min(HP_MAX, this.hp + HP_REGEN_IDLE * dt);
     }
 
-    const mat = this.bodyMesh.material as THREE.MeshStandardMaterial;
+    let intensity = 0;
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
-      mat.emissiveIntensity = 1.5 * Math.max(this.flashTimer / HIT_FLASH_TIME, 0);
-    } else {
-      mat.emissiveIntensity = 0;
+      intensity = 1.5 * Math.max(this.flashTimer / HIT_FLASH_TIME, 0);
     }
+    for (const mat of this.modelMats) mat.emissiveIntensity = intensity;
   }
 
   // ---------- 第三人称相机 ----------

@@ -3,6 +3,7 @@ import { SceneManager } from './game/SceneManager';
 import { PlayerController, INK_MAX, HP_MAX } from './game/PlayerController';
 import { InkSystem, Team, DEFAULT_TEAM_COLORS } from './game/InkSystem';
 import { EnemyBot, BotDifficulty } from './game/EnemyBot';
+import { ModelShowcase } from './game/ModelShowcase';
 import { Input } from './game/Input';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
@@ -34,6 +35,7 @@ class Game {
   private input: Input;
   private hud: HUD;
   private minimap = new Minimap();
+  private showcase!: ModelShowcase;
   private clock = new THREE.Clock();
   private lastTickSecond = -1;
 
@@ -53,6 +55,7 @@ class Game {
       this.sceneManager.camera
     );
     this.bot = new EnemyBot(this.sceneManager.scene, this.inkSystem);
+    this.showcase = new ModelShowcase(this.sceneManager.scene);
     this.input = new Input(canvas);
     this.hud = new HUD();
 
@@ -218,6 +221,8 @@ class Game {
     // 限制 dt，避免切后台回来后瞬移
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const active = this.input.pointerLocked && !this.matchEnded;
+
+    this.showcase.update(dt);
 
     if (active) {
       this.timeLeft -= dt;
