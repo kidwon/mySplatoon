@@ -17,13 +17,20 @@ const SHOWCASE_INK: Record<ChiikawaCharacter, string> = {
  */
 export class ModelShowcase {
   private turntables: THREE.Group[] = [];
+  private pedestalMats = new Map<ChiikawaCharacter, THREE.MeshStandardMaterial>();
 
   constructor(scene: THREE.Scene) {
     const lineup: ChiikawaCharacter[] = ['chiikawa', 'hachiware', 'nikori', 'usagi', 'shisa'];
-    const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x4d4968, roughness: 0.8 });
 
     lineup.forEach((key, i) => {
       const x = (i - 2) * 2.8;
+      // 每台座独立材质，供选中发光
+      const pedestalMat = new THREE.MeshStandardMaterial({
+        color: 0x4d4968,
+        roughness: 0.8,
+        emissive: 0x000000,
+      });
+      this.pedestalMats.set(key, pedestalMat);
       const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.15, 0.3, 24), pedestalMat);
       pedestal.position.set(x, 0.15, 22);
       pedestal.castShadow = true;
@@ -38,6 +45,19 @@ export class ModelShowcase {
       scene.add(turntable);
       this.turntables.push(turntable);
     });
+  }
+
+  /** 被选中角色的台座按队伍色发光（未选中的熄灭） */
+  setHighlights(selection: Partial<Record<ChiikawaCharacter, string>>) {
+    for (const [key, m] of this.pedestalMats) {
+      const color = selection[key];
+      if (color) {
+        m.emissive.set(color);
+        m.emissiveIntensity = 0.55;
+      } else {
+        m.emissiveIntensity = 0;
+      }
+    }
   }
 
   update(dt: number) {

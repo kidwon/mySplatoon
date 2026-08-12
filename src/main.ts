@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { SceneManager } from './game/SceneManager';
 import { PlayerController, INK_MAX, HP_MAX } from './game/PlayerController';
 import { InkSystem, Team, DEFAULT_TEAM_COLORS } from './game/InkSystem';
+import {
+  CHARACTER_DEFS,
+  CHARACTER_KEYS,
+  isCharacterKey,
+} from './game/models/characters';
+import type { ChiikawaCharacter } from './game/models/chiikawa';
 import { EnemyBot, BotDifficulty } from './game/EnemyBot';
 import { ModelShowcase } from './game/ModelShowcase';
 import { Input } from './game/Input';
@@ -44,17 +50,31 @@ class Game {
   private difficulty: BotDifficulty = 'normal';
   private playerColor = DEFAULT_TEAM_COLORS.player;
   private enemyColor = DEFAULT_TEAM_COLORS.enemy;
+  private playerChar: ChiikawaCharacter;
+  private enemyChar: ChiikawaCharacter;
 
   constructor() {
     const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+
+    // 角色选择（持久化）
+    const savedPlayer = localStorage.getItem('mysplatoon-char-player');
+    const savedEnemy = localStorage.getItem('mysplatoon-char-enemy');
+    this.playerChar = isCharacterKey(savedPlayer) ? savedPlayer : 'hachiware';
+    this.enemyChar = isCharacterKey(savedEnemy) ? savedEnemy : 'usagi';
 
     this.sceneManager = new SceneManager(canvas);
     this.inkSystem = new InkSystem(this.sceneManager.scene);
     this.player = new PlayerController(
       this.sceneManager.scene,
-      this.sceneManager.camera
+      this.sceneManager.camera,
+      CHARACTER_DEFS[this.playerChar]
     );
-    this.bot = new EnemyBot(this.sceneManager.scene, this.inkSystem);
+    this.bot = new EnemyBot(
+      this.sceneManager.scene,
+      this.inkSystem,
+      'normal',
+      CHARACTER_DEFS[this.enemyChar]
+    );
     this.showcase = new ModelShowcase(this.sceneManager.scene);
     this.input = new Input(canvas);
     this.hud = new HUD();
@@ -121,6 +141,22 @@ class Game {
         this.hud.refreshLocale();
       });
     });
+    // 角色选择：为双方生成角色按钮（data-i18n 由 applyStatic 统一填充文案）
+    startOverlay.querySelectorAll<HTMLElement>('.char-buttons').forEach((row) => {
+      const side = row.dataset.side as 'player' | 'enemy';
+      for (const key of CHARACTER_KEYS) {
+        const btn = document.createElement('button');
+        btn.className = 'opt-btn char-btn';
+        btn.dataset.char = key;
+        btn.dataset.i18n = `char_${key}`;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.pickCharacter(side, key);
+        });
+        row.appendChild(btn);
+      }
+    });
+
     // 墨色选择：为双方生成色板按钮
     startOverlay.querySelectorAll<HTMLElement>('.swatches').forEach((row) => {
       const team = row.dataset.team as Team;
@@ -141,6 +177,7 @@ class Game {
     markLang();
     this.changeDifficulty(this.difficulty);
     this.applyColors();
+    this.markCharacters();
 
     document.addEventListener('pointerlockchange', () => {
       // 结算界面显示期间不弹开始覆盖层
@@ -163,6 +200,38 @@ class Game {
       b.classList.toggle('selected', b.dataset.difficulty === difficulty);
     });
     this.hud.showDifficulty(difficulty, flash);
+  }
+
+  /** 选角色：重建对应 avatar，清场重开一局 */
+  private pickCharacter(side: 'player' | 'enemy', key: ChiikawaCharacter) {
+    if (side === 'player') {
+      if (key === this.playerChar) return;
+      this.playerChar = key;
+      localStorage.setItem('mysplatoon-char-player', key);
+      this.player.setCharacter(CHARACTER_DEFS[key]);
+    } else {
+      if (key === this.enemyChar) return;
+      this.enemyChar = key;
+      localStorage.setItem('mysplatoon-char-enemy', key);
+      this.bot.setCharacter(CHARACTER_DEFS[key]);
+    }
+    this.markCharacters();
+    this.resetMatch();
+  }
+
+  /** 同步角色按钮选中态与展示台台座发光 */
+  private markCharacters() {
+    document.querySelectorAll<HTMLElement>('.char-buttons').forEach((row) => {
+      const selected = row.dataset.side === 'player' ? this.playerChar : this.enemyChar;
+      row.querySelectorAll<HTMLElement>('.char-btn').forEach((b) => {
+        b.classList.toggle('selected', b.dataset.char === selected);
+      });
+    });
+    // 台座发光：对手先写、玩家后写——双方同角色时玩家色优先
+    const highlights: Partial<Record<ChiikawaCharacter, string>> = {};
+    highlights[this.enemyChar] = this.enemyColor;
+    highlights[this.playerChar] = this.playerColor;
+    this.showcase.setHighlights(highlights);
   }
 
   /** 选色；若与另一方撞色则交换双方颜色。换色会清场重开一局 */
@@ -192,6 +261,8 @@ class Game {
         s.classList.toggle('selected', s.dataset.hex === selected);
       });
     });
+    // 换色后台座发光颜色同步
+    this.markCharacters();
   }
 
   private endMatch() {

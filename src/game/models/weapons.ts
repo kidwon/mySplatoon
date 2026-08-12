@@ -13,6 +13,8 @@ export interface WeaponBuild {
   group: THREE.Group;
   /** 跟随队伍墨色的材质 */
   inkMats: THREE.MeshStandardMaterial[];
+  /** 枪口/出墨点（武器组局部坐标，供子弹起点标定） */
+  muzzle?: THREE.Vector3;
 }
 
 const BODY_GRAY = '#E8E6E2';
@@ -71,7 +73,7 @@ export function createInkShooter(inkColor: string): WeaponBuild {
   g.add(mesh('tank-shell', new THREE.CylinderGeometry(0.06, 0.06, 0.15, 10), body, 0, 0.13, 0.1, 0.35));
   g.add(mesh('tank-ink', new THREE.CylinderGeometry(0.048, 0.048, 0.11, 10), ink, 0, 0.13, 0.1, 0.35));
 
-  return { group: g, inkMats: [ink] };
+  return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, 0.05, -0.38) };
 }
 
 /** 墨辊（Roller）：斜握长柄 + 横置辊筒（ROLLER HEAD）+ 滴墨 */
@@ -91,7 +93,7 @@ export function createInkRoller(inkColor: string): WeaponBuild {
   g.add(mesh('drip-1', new THREE.SphereGeometry(0.035, 8, 6), ink, 0.08, -0.31, -0.5));
   g.add(mesh('drip-2', new THREE.SphereGeometry(0.025, 8, 6), ink, -0.1, -0.29, -0.46));
 
-  return { group: g, inkMats: [ink] };
+  return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, -0.2, -0.55) };
 }
 
 /** 洗衣机泼桶（Slosher）：双手抱持的滚筒洗衣机 + 舱门墨旋涡 + 溢出墨 */
@@ -119,7 +121,7 @@ export function createSlosherWasher(inkColor: string): WeaponBuild {
   g.add(mesh('ink-spill-1', new THREE.SphereGeometry(0.05, 8, 6), ink, 0.1, 0.22, -0.06));
   g.add(mesh('ink-spill-2', new THREE.SphereGeometry(0.035, 8, 6), ink, 0.16, 0.19, -0.1));
 
-  return { group: g, inkMats: [ink] };
+  return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, 0.18, -0.12) };
 }
 
 /** 蓄力狙（Charger）：木质枪托 + 长枪管 + 瞄准镜（SCOPE）+ 墨压罐 */
@@ -145,7 +147,7 @@ export function createInkCharger(inkColor: string): WeaponBuild {
   tank.rotation.x = Math.PI / 2;
   g.add(tank);
 
-  return { group: g, inkMats: [ink] };
+  return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, 0.03, -0.7) };
 }
 
 /** 刨冰泼桶（ニコリ专属）：蓝杯 + 墨色冰山（跟随队伍色）+ 木勺 */
@@ -173,7 +175,7 @@ export function createShavedIceWeapon(inkColor: string): WeaponBuild {
   spoon.rotation.z = -0.45;
   g.add(spoon);
 
-  return { group: g, inkMats: [ink] };
+  return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, 0.22, -0.02) };
 }
 
 /** 角色 ↔ 武器的官方配对（参考图） */

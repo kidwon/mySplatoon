@@ -2,10 +2,8 @@ import * as THREE from 'three';
 import { Input } from './Input';
 import { InkSystem, DEFAULT_TEAM_COLORS, Team, HitTarget } from './InkSystem';
 import { audio } from './AudioManager';
-import { createHachiwareModel } from './models/chiikawa';
-import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
-import { createInkShooter, attachWeapon, WeaponBuild } from './models/weapons';
-import { CharacterAnimator } from './models/CharacterAnimator';
+import { CharacterAvatar } from './CharacterAvatar';
+import { CharacterDef } from './models/characters';
 import { ARENA_HALF, resolveObstacleCollisions, cameraObstruction } from './SceneManager';
 
 export type PlayerForm = 'human' | 'squid';
@@ -49,7 +47,6 @@ const FADE_PITCH_MIN_OPACITY = 0.35; // 俯角淡出下限
 const FADE_OCCLUDE_RADIUS = 1.0; // 相机→对手视线距角色中心小于此半径视为挡住对手
 const FADE_OCCLUDE_OPACITY = 0.3; // 挡住对手时的淡出目标
 const FADE_OCCLUDE_SPEED = 8; // 该淡出的过渡速度
-const CAM_HEIGHT = 1.6;
 const PITCH_MIN = -1.15;
 const PITCH_MAX = 0.55;
 
@@ -79,11 +76,8 @@ export class PlayerController implements HitTarget {
     return this.yaw;
   }
 
-  private model: THREE.Group;
-  private modelMats: THREE.MeshStandardMaterial[];
-  private scarfMat: THREE.MeshStandardMaterial;
-  private weapon: WeaponBuild;
-  private animator: CharacterAnimator;
+  private avatar: CharacterAvatar;
+  private teamColor: string = DEFAULT_TEAM_COLORS.player;
   /** 本帧实际移动速度（供步行动画） */
   private currentSpeed = 0;
   /** 相机吊臂当前长度（被遮挡时即时收缩，解除后平滑弹回） */
@@ -94,8 +88,6 @@ export class PlayerController implements HitTarget {
   private occlFade = 1;
   /** 对手位置（主循环每帧传入；null = 对手不在场） */
   private enemyPos: THREE.Vector3 | null = null;
-  /** 武器全部材质（含非墨色部件，供整体淡出） */
-  private weaponMats: THREE.MeshStandardMaterial[] = [];
 
   private yaw = 0;
   private pitch = -0.25;
@@ -114,28 +106,14 @@ export class PlayerController implements HitTarget {
   private tmpVecB = new THREE.Vector3();
   private tmpEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
-  constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {
+  constructor(
+    scene: THREE.Scene,
+    private camera: THREE.PerspectiveCamera,
+    def: CharacterDef
+  ) {
     this.group = new THREE.Group();
-
-    // ハチワレ角色模型（材质按实例克隆，受击闪白不影响其他同款模型）
-    this.model = createHachiwareModel();
-    this.modelMats = instantiateMaterials(this.model);
-    this.scarfMat = addTeamScarf(this.model, 0.68, 0.38, DEFAULT_TEAM_COLORS.player);
-    // 墨枪与射击机制匹配（ハチワレ本命的墨辊等做了辊类武器机制再换回）
-    this.weapon = createInkShooter(DEFAULT_TEAM_COLORS.player);
-    attachWeapon(this.model, this.weapon);
-    this.group.add(this.model);
-    this.animator = new CharacterAnimator(this.model);
-
-    // 收集武器全部材质（本就按实例新建，无共享风险），并预置 transparent 供淡出
-    this.weapon.group.traverse((obj) => {
-      if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshStandardMaterial) {
-        if (!this.weaponMats.includes(obj.material)) {
-          obj.material.transparent = true;
-          this.weaponMats.push(obj.material);
-        }
-      }
-    });
+    this.avatar = new CharacterAvatar(def, this.teamColor);
+    this.group.add(this.avatar.group);
 
     this.group.position.set(0, 0, 18);
     scene.add(this.group);
@@ -143,20 +121,26 @@ export class PlayerController implements HitTarget {
 
   /** 更换队伍墨色（围巾 + 武器墨色部件，不染角色本体） */
   setColor(hex: string) {
-    this.scarfMat.color.set(hex);
-    this.scarfMat.emissive.set(hex);
-    for (const m of this.weapon.inkMats) {
-      m.color.set(hex);
-      m.emissive.set(hex);
-    }
+    this.teamColor = hex;
+    this.avatar.setColor(hex);
+  }
+
+  /** 更换角色（重建 avatar，保留队伍色；调用方随后应重置对局） */
+  setCharacter(def: CharacterDef) {
+    this.group.remove(this.avatar.group);
+    this.avatar = new CharacterAvatar(def, this.teamColor);
+    this.group.add(this.avatar.group);
+    this.form = 'human';
   }
 
   // ---------- HitTarget ----------
   get radius() {
-    return this.form === 'squid' ? 0.45 : 0.55;
+    const r = this.avatar.def.radius;
+    return this.form === 'squid' ? r * 0.85 : r;
   }
   get height() {
-    return this.form === 'squid' ? 0.6 : 1.7;
+    const h = this.avatar.def.height;
+    return this.form === 'squid' ? h * 0.35 : h;
   }
   get alive() {
     return !this.downed;
@@ -184,7 +168,7 @@ export class PlayerController implements HitTarget {
     this.velocityY = 0;
     this.hp = HP_MAX;
     this.ink = INK_MAX;
-    this.animator.reset();
+    this.avatar.resetPose();
     audio.respawn();
   }
 
@@ -203,9 +187,7 @@ export class PlayerController implements HitTarget {
     this.flashTimer = 0;
     this.group.visible = true;
     this.form = 'human';
-    this.model.scale.set(1, 1, 1);
-    this.weapon.group.visible = true;
-    this.animator.reset();
+    this.avatar.resetPose();
   }
 
   update(dt: number, input: Input, inkSystem: InkSystem, enemyPos?: THREE.Vector3) {
@@ -224,7 +206,7 @@ export class PlayerController implements HitTarget {
     this.updateShooting(dt, input, inkSystem);
     this.updateInkTank(dt);
     this.updateHealth(dt);
-    this.animator.update(dt, {
+    this.avatar.animate(dt, {
       speed: this.currentSpeed,
       grounded: this.grounded,
       swimming: this.form === 'squid',
@@ -253,14 +235,7 @@ export class PlayerController implements HitTarget {
 
     if (newForm !== this.form) {
       this.form = newForm;
-      if (this.form === 'squid') {
-        // 整体压扁，模拟乌贼形态 & 缩小碰撞体积；武器收起
-        this.model.scale.set(1.15, 0.34, 1.15);
-        this.weapon.group.visible = false;
-      } else {
-        this.model.scale.set(1, 1, 1);
-        this.weapon.group.visible = true;
-      }
+      this.avatar.setSquid(this.form === 'squid');
     }
 
     // 透明度统一在 applyOpacity()（updateCamera 末尾）处理：
@@ -328,10 +303,10 @@ export class PlayerController implements HitTarget {
     );
   }
 
-  /** 相机/准星共用的瞄准支点：头部高度 + 右肩偏移（限制在场内，防止被推进围墙） */
+  /** 相机/准星共用的瞄准支点：视线高度（按角色体型）+ 右肩偏移（限制在场内） */
   private aimPivot(out: THREE.Vector3): THREE.Vector3 {
     out.copy(this.group.position);
-    out.y += CAM_HEIGHT;
+    out.y += this.avatar.def.camHeight;
     this.tmpRight.set(1, 0, 0).applyAxisAngle(UP, this.yaw);
     out.addScaledVector(this.tmpRight, SHOULDER_OFFSET);
     out.x = THREE.MathUtils.clamp(out.x, -ARENA_HALF + 0.1, ARENA_HALF - 0.1);
@@ -365,9 +340,7 @@ export class PlayerController implements HitTarget {
     const aimPoint = this.tmpAim.copy(pivot).addScaledVector(forward, aimDist);
 
     // 2) 从武器枪口出弹，弹道向瞄准点收敛（muzzle-to-aimpoint）
-    this.weapon.group.updateWorldMatrix(true, false);
-    const muzzle = this.tmpMuzzle.set(0, 0.05, -0.38);
-    this.weapon.group.localToWorld(muzzle);
+    const muzzle = this.avatar.getMuzzleWorld(this.tmpMuzzle);
 
     const shootDir = aimPoint.sub(muzzle);
     if (shootDir.dot(forward) <= 0.05) {
@@ -405,7 +378,7 @@ export class PlayerController implements HitTarget {
       this.flashTimer -= dt;
       intensity = 1.5 * Math.max(this.flashTimer / HIT_FLASH_TIME, 0);
     }
-    for (const mat of this.modelMats) mat.emissiveIntensity = intensity;
+    this.avatar.setFlash(intensity);
   }
 
   // ---------- 第三人称相机（含遮挡收缩） ----------
@@ -474,12 +447,9 @@ export class PlayerController implements HitTarget {
     this.applyOpacity();
   }
 
-  /** 合并两个透明度因素：潜墨半透明 × 相机贴近淡出（材质已预置 transparent，只改 opacity） */
+  /** 合并两个透明度因素：潜墨半透明 × 相机贴近淡出 */
   private applyOpacity() {
     const swimming = this.form === 'squid' && this.onOwnInk;
-    const opacity = (swimming ? 0.45 : 1) * this.camFade;
-    for (const mat of this.modelMats) mat.opacity = opacity;
-    this.scarfMat.opacity = opacity;
-    for (const mat of this.weaponMats) mat.opacity = opacity;
+    this.avatar.setOpacity((swimming ? 0.45 : 1) * this.camFade);
   }
 }

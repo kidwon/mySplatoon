@@ -1,9 +1,7 @@
 import * as THREE from 'three';
 import { InkSystem, DEFAULT_TEAM_COLORS, Team, HitTarget } from './InkSystem';
-import { createUsagiModel } from './models/chiikawa';
-import { instantiateMaterials, addTeamScarf } from './models/characterUtils';
-import { createSlosherWasher, attachWeapon, WeaponBuild } from './models/weapons';
-import { CharacterAnimator } from './models/CharacterAnimator';
+import { CharacterAvatar } from './CharacterAvatar';
+import { CharacterDef } from './models/characters';
 import {
   ARENA_HALF,
   resolveObstacleCollisions,
@@ -63,8 +61,6 @@ const HIT_FLASH_TIME = 0.18;
 export class EnemyBot implements HitTarget {
   readonly group = new THREE.Group();
   readonly team: Team = 'enemy';
-  readonly radius = 0.55;
-  readonly height = 1.7;
 
   private hp = HP_MAX;
   private downed = false;
@@ -72,12 +68,17 @@ export class EnemyBot implements HitTarget {
   private flashTimer = 0;
 
   private params: BotParams = DIFFICULTY_PARAMS.normal;
-  private modelMats!: THREE.MeshStandardMaterial[];
-  private scarfMat!: THREE.MeshStandardMaterial;
-  private weapon!: WeaponBuild;
-  private animator!: CharacterAnimator;
+  private avatar!: CharacterAvatar;
+  private teamColor: string = DEFAULT_TEAM_COLORS.enemy;
   /** 本帧移动速度（供步行动画） */
   private moveSpeed = 0;
+
+  get radius() {
+    return this.avatar.def.radius;
+  }
+  get height() {
+    return this.avatar.def.height;
+  }
   private target = new THREE.Vector3();
   private retargetTimer = 0;
   private restTimer = 0;
@@ -88,20 +89,22 @@ export class EnemyBot implements HitTarget {
   constructor(
     scene: THREE.Scene,
     private inkSystem: InkSystem,
-    difficulty: BotDifficulty = 'normal'
+    difficulty: BotDifficulty = 'normal',
+    def: CharacterDef
   ) {
-    // うさぎ角色模型（双手抱洗衣机泼桶），材质按实例克隆
-    const model = createUsagiModel();
-    this.modelMats = instantiateMaterials(model);
-    this.scarfMat = addTeamScarf(model, 0.77, 0.36, DEFAULT_TEAM_COLORS.enemy);
-    this.weapon = createSlosherWasher(DEFAULT_TEAM_COLORS.enemy);
-    attachWeapon(model, this.weapon);
-    this.group.add(model);
-    this.animator = new CharacterAnimator(model);
+    this.avatar = new CharacterAvatar(def, this.teamColor);
+    this.group.add(this.avatar.group);
 
     scene.add(this.group);
     this.setDifficulty(difficulty);
     this.reset();
+  }
+
+  /** 更换角色（重建 avatar，保留队伍色；调用方随后应重置对局） */
+  setCharacter(def: CharacterDef) {
+    this.group.remove(this.avatar.group);
+    this.avatar = new CharacterAvatar(def, this.teamColor);
+    this.group.add(this.avatar.group);
   }
 
   setDifficulty(difficulty: BotDifficulty) {
@@ -110,12 +113,8 @@ export class EnemyBot implements HitTarget {
 
   /** 更换队伍墨色（围巾 + 武器墨色部件，不染角色本体） */
   setColor(hex: string) {
-    this.scarfMat.color.set(hex);
-    this.scarfMat.emissive.set(hex);
-    for (const m of this.weapon.inkMats) {
-      m.color.set(hex);
-      m.emissive.set(hex);
-    }
+    this.teamColor = hex;
+    this.avatar.setColor(hex);
   }
 
   // ---------- HitTarget ----------
@@ -140,7 +139,7 @@ export class EnemyBot implements HitTarget {
     this.group.visible = true;
     this.group.position.set(0, 0, -18);
     this.hp = HP_MAX;
-    this.animator.reset();
+    this.avatar.resetPose();
     this.pickTarget();
   }
 
@@ -153,7 +152,7 @@ export class EnemyBot implements HitTarget {
     this.respawnTimer = 0;
     this.flashTimer = 0;
     this.group.visible = true;
-    this.animator.reset();
+    this.avatar.resetPose();
     this.pickTarget();
   }
 
@@ -181,11 +180,11 @@ export class EnemyBot implements HitTarget {
       this.flashTimer -= dt;
       flashIntensity = 1.5 * Math.max(this.flashTimer / HIT_FLASH_TIME, 0);
     }
-    for (const m of this.modelMats) m.emissiveIntensity = flashIntensity;
+    this.avatar.setFlash(flashIntensity);
 
     this.moveSpeed = 0;
     this.updateBehavior(dt, player);
-    this.animator.update(dt, { speed: this.moveSpeed, grounded: true });
+    this.avatar.animate(dt, { speed: this.moveSpeed, grounded: true });
   }
 
   /** 行为决策：休息 / 索敌反击 / 巡逻涂地（moveSpeed 由具体行为设置） */
@@ -295,9 +294,10 @@ export class EnemyBot implements HitTarget {
   }
 
   private fire() {
+    // 出弹高度随角色体型（约胸口高度）
     const origin = this.group.position
       .clone()
-      .add(new THREE.Vector3(0, 1.2, 0))
+      .add(new THREE.Vector3(0, this.avatar.def.height * 0.7, 0))
       .addScaledVector(this.tmpShoot, 0.7);
     this.inkSystem.spawnBullet(origin, this.tmpShoot, 'enemy', this.params.splatScale);
   }
