@@ -148,12 +148,41 @@ export function createInkCharger(inkColor: string): WeaponBuild {
   return { group: g, inkMats: [ink] };
 }
 
+/** 刨冰泼桶（ニコリ专属）：蓝杯 + 墨色冰山（跟随队伍色）+ 木勺 */
+export function createShavedIceWeapon(inkColor: string): WeaponBuild {
+  const g = new THREE.Group();
+  g.name = 'weapon-shavedice';
+  const ink = inkMat(inkColor);
+  const cup = solid('#A8CBE8');
+
+  // 双手抱持感：整体略移向身前
+  g.position.set(-0.06, -0.02, -0.06);
+
+  g.add(mesh('ice-cup', new THREE.CylinderGeometry(0.09, 0.065, 0.12, 14), cup, 0, 0, 0));
+  g.add(mesh('ice-cup-rim', new THREE.CylinderGeometry(0.094, 0.094, 0.02, 14), solid('#F5F3EE'), 0, 0.055, 0));
+  // 墨色冰山（武器的"墨仓"视觉，随队伍换色）
+  const mound = mesh('ice-mound', new THREE.SphereGeometry(0.095, 14, 10), ink, 0, 0.1, 0);
+  mound.scale.set(1, 0.95, 1);
+  g.add(mound);
+  g.add(mesh('ice-lump-1', new THREE.SphereGeometry(0.055, 10, 8), ink, -0.045, 0.16, -0.015));
+  g.add(mesh('ice-lump-2', new THREE.SphereGeometry(0.048, 10, 8), ink, 0.05, 0.155, 0.02));
+  g.add(mesh('ice-peak', new THREE.SphereGeometry(0.04, 10, 8), ink, 0.005, 0.195, -0.01));
+  // 冰晶高光（GLINT IN SHAVED ICE）
+  g.add(mesh('ice-glint', new THREE.SphereGeometry(0.018, 8, 6), solid('#FFFFFF'), -0.03, 0.19, -0.04));
+  const spoon = mesh('ice-spoon', new THREE.CylinderGeometry(0.008, 0.008, 0.13, 6), solid('#B08A5A'), 0.07, 0.2, 0);
+  spoon.rotation.z = -0.45;
+  g.add(spoon);
+
+  return { group: g, inkMats: [ink] };
+}
+
 /** 角色 ↔ 武器的官方配对（参考图） */
 export const WEAPON_FACTORIES = {
   chiikawa: createInkShooter,
   hachiware: createInkRoller,
   usagi: createSlosherWasher,
   shisa: createInkCharger,
+  nikori: createShavedIceWeapon,
 } as const;
 
 /** 把武器挂到角色的 handSocket 上 */

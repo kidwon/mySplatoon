@@ -8,6 +8,7 @@ const SHOWCASE_INK: Record<ChiikawaCharacter, string> = {
   hachiware: '#4A90D9',
   usagi: '#69C25A',
   shisa: '#4AC2B8',
+  nikori: '#F04C93',
 };
 
 /**
@@ -18,11 +19,11 @@ export class ModelShowcase {
   private turntables: THREE.Group[] = [];
 
   constructor(scene: THREE.Scene) {
-    const lineup: ChiikawaCharacter[] = ['chiikawa', 'hachiware', 'usagi', 'shisa'];
+    const lineup: ChiikawaCharacter[] = ['chiikawa', 'hachiware', 'nikori', 'usagi', 'shisa'];
     const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x4d4968, roughness: 0.8 });
 
     lineup.forEach((key, i) => {
-      const x = (i - 1.5) * 2.8;
+      const x = (i - 2) * 2.8;
       const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.15, 0.3, 24), pedestalMat);
       pedestal.position.set(x, 0.15, 22);
       pedestal.castShadow = true;

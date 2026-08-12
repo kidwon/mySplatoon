@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createNikoriModel } from './nikori';
 
 /**
  * ちいかわ角色组 — 程序化 Three.js 模型（依据 img2threejs 风格参考图重建）。
@@ -501,6 +502,7 @@ export const CHIIKAWA_FACTORIES = {
   hachiware: createHachiwareModel,
   usagi: createUsagiModel,
   shisa: createShisaModel,
+  nikori: createNikoriModel,
 } as const;
 
 export type ChiikawaCharacter = keyof typeof CHIIKAWA_FACTORIES;
