@@ -37,6 +37,7 @@
       <div id="form-badge" class="human">HUMAN</div>
 
       <div id="difficulty-badge"></div>
+      <div id="net-badge" class="hidden"></div>
 
       <div id="controls-hint">
         <p data-i18n-html="controls1"></p>
@@ -72,6 +73,63 @@
       </div>
     </div>
 
+    <!-- 联机大厅 -->
+    <div id="online-overlay" class="hidden">
+      <div class="panel">
+        <h1 data-i18n="online"></h1>
+        <div id="online-status"></div>
+
+        <div id="online-entry">
+          <div class="option-row">
+            <span class="label" data-i18n="server"></span>
+            <input id="online-server" class="online-input server" spellcheck="false" />
+            <button id="online-connect" class="opt-btn" data-i18n="connect"></button>
+          </div>
+          <div class="option-row">
+            <button id="online-create" class="opt-btn" data-i18n="createRoom"></button>
+          </div>
+          <div class="option-row">
+            <input id="online-code" class="online-input" maxlength="4" autocomplete="off" />
+            <button id="online-join" class="opt-btn" data-i18n="joinRoom"></button>
+          </div>
+        </div>
+
+        <div id="online-room" class="hidden">
+          <div class="sub" data-i18n="roomCode"></div>
+          <div id="online-room-code"></div>
+          <div class="room-hint" data-i18n="shareCode"></div>
+          <ul id="online-players"></ul>
+          <div class="option-row">
+            <button id="online-char" class="opt-btn"></button>
+          </div>
+          <div class="option-row color-row">
+            <span class="label" data-i18n="yourColor"></span>
+            <span class="swatches" id="online-swatches"></span>
+          </div>
+          <div class="option-row">
+            <button id="online-ready" class="opt-btn"></button>
+            <button id="online-leave" class="opt-btn" data-i18n="leaveRoom"></button>
+          </div>
+          <div id="online-wait" class="sub"></div>
+        </div>
+
+        <p id="online-error"></p>
+        <div class="option-row">
+          <button id="online-back" class="opt-btn" data-i18n="selectBack"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 联机对局中释放鼠标后的进入提示 -->
+    <div id="enter-overlay" class="hidden">
+      <div class="panel">
+        <h1 data-i18n="online"></h1>
+        <div id="enter-countdown" class="hidden"></div>
+        <p data-i18n="clickToEnter"></p>
+        <p class="sub" data-i18n="escHintOnline"></p>
+      </div>
+    </div>
+
     <!-- 未锁定鼠标时的开始提示 -->
     <div id="start-overlay">
       <div class="panel">
@@ -99,6 +157,9 @@
           <button class="opt-btn diff-btn" data-difficulty="easy" data-i18n="easy"></button>
           <button class="opt-btn diff-btn selected" data-difficulty="normal" data-i18n="normal"></button>
           <button class="opt-btn diff-btn" data-difficulty="hard" data-i18n="hard"></button>
+        </div>
+        <div class="option-row">
+          <button id="open-online" class="opt-btn" data-i18n="online"></button>
         </div>
         <p data-i18n="clickToStart"></p>
         <p class="sub" data-i18n="escHint"></p>

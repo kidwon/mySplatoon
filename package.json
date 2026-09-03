@@ -1,19 +1,26 @@
 {
   "name": "my-splatoon",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "tsx server/index.ts",
+    "dev:all": "concurrently -k \"npm:dev\" \"npm:server\""
   },
   "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.13",
     "typescript": "^5.5.4",
     "vite": "^5.4.0"
   },
   "dependencies": {
+    "@types/three": "^0.167.0",
     "three": "^0.167.0",
-    "@types/three": "^0.167.0"
+    "ws": "^8.21.3"
   }
 }

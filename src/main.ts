@@ -6,29 +6,21 @@ import { CHARACTER_DEFS, isCharacterKey } from './game/models/characters';
 import type { ChiikawaCharacter } from './game/models/chiikawa';
 import { EnemyBot, BotDifficulty } from './game/EnemyBot';
 import { ModelShowcase } from './game/ModelShowcase';
+import { OnlineSession } from './game/OnlineSession';
 import { Input } from './game/Input';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 import { CharacterSelect } from './ui/CharacterSelect';
-import { applyStatic, getLang, setLang, Lang, t } from './ui/i18n';
+import { OnlineLobby } from './ui/OnlineLobby';
+import { applyStatic, getLang, setLang, Lang, t, fmt } from './ui/i18n';
 import { audio } from './game/AudioManager';
+import { INK_PALETTE } from './net/protocol';
 
 /** 一局时长（秒） */
 const MATCH_DURATION = 180;
 
-/**
- * 可选墨色调色板。
- * 任意两色（以及与地板底色/网格线）至少有一个 RGB 通道相差 ≥46，
- * 保证 InkSystem 像素采样判定不会混色。
- */
-const INK_PALETTE = [
-  '#9B51E0', // 紫
-  '#F2A33C', // 橙
-  '#29D9C2', // 青
-  '#B3E62C', // 黄绿
-  '#F04C93', // 粉
-  '#3D5BF5', // 蓝
-];
+type Mode = 'solo' | 'online';
+type Overlay = 'start' | 'online' | 'enter' | 'select' | null;
 
 class Game {
   private sceneManager: SceneManager;
@@ -40,9 +32,14 @@ class Game {
   private minimap = new Minimap();
   private showcase!: ModelShowcase;
   private charSelect = new CharacterSelect();
+  private session: OnlineSession;
+  private lobby = new OnlineLobby(INK_PALETTE);
   private clock = new THREE.Clock();
   private lastTickSecond = -1;
 
+  private mode: Mode = 'solo';
+  /** 角色选择页关闭后返回哪个覆盖层 */
+  private selectReturn: Exclude<Overlay, null> = 'start';
   private timeLeft = MATCH_DURATION;
   private matchEnded = false;
   private difficulty: BotDifficulty = 'normal';
@@ -76,6 +73,7 @@ class Game {
     this.showcase = new ModelShowcase(this.sceneManager.scene);
     this.input = new Input(canvas);
     this.hud = new HUD();
+    this.session = new OnlineSession(this.sceneManager.scene, this.inkSystem, this.player);
 
     // 命中反馈：准星脉冲 + 音效
     this.inkSystem.onTargetHit = (shooter, killed) => {
@@ -89,20 +87,32 @@ class Game {
     };
 
     this.setupOverlays();
+    this.setupOnline();
     this.loop();
+  }
+
+  /** 统一管理四个互斥覆盖层；null = 全部隐藏（对局中） */
+  private showOverlay(which: Overlay) {
+    document.getElementById('start-overlay')!.classList.toggle('hidden', which !== 'start');
+    document.getElementById('online-overlay')!.classList.toggle('hidden', which !== 'online');
+    document.getElementById('enter-overlay')!.classList.toggle('hidden', which !== 'enter');
+    document.getElementById('select-overlay')!.classList.toggle('hidden', which !== 'select');
+    document.getElementById('hud')!.classList.toggle('hidden', which === 'select');
   }
 
   /** 开始覆盖层（锁鼠标）与结算覆盖层（重开） */
   private setupOverlays() {
     const startOverlay = document.getElementById('start-overlay')!;
-    startOverlay.addEventListener('click', () => {
+    const lockPointer = () => {
       audio.ensureStarted(); // AudioContext 需要用户手势才能启动
       this.input.requestPointerLock();
-    });
+    };
+    startOverlay.addEventListener('click', lockPointer);
+    document.getElementById('enter-overlay')!.addEventListener('click', lockPointer);
 
     // M 键静音开关
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'KeyM') audio.toggleMute();
+      if (e.code === 'KeyM' && !this.typingInInput(e)) audio.toggleMute();
     });
 
     // 难度选择：点按钮只切难度，不触发开始（阻断冒泡）
@@ -113,7 +123,7 @@ class Game {
       });
     });
 
-    // 对局中 1/2/3 快捷键切难度
+    // 对局中 1/2/3 快捷键切难度（仅单机）
     const hotkeys: Record<string, BotDifficulty> = {
       Digit1: 'easy',
       Digit2: 'normal',
@@ -121,7 +131,7 @@ class Game {
     };
     window.addEventListener('keydown', (e) => {
       const d = hotkeys[e.code];
-      if (d) this.changeDifficulty(d, true);
+      if (d && this.mode === 'solo' && !this.typingInInput(e)) this.changeDifficulty(d, true);
     });
 
     // 语言选择：应用词典并刷新 HUD 缓存文案
@@ -137,6 +147,7 @@ class Game {
         setLang(btn.dataset.lang as Lang);
         markLang();
         this.hud.refreshLocale();
+        this.lobby.refreshLocale();
         this.markCharacters(); // 入口按钮文案是动态拼接的，需手动刷新
       });
     });
@@ -144,9 +155,14 @@ class Game {
     for (const side of ['player', 'enemy'] as const) {
       document.getElementById(`open-select-${side}`)!.addEventListener('click', (e) => {
         e.stopPropagation();
+        this.selectReturn = 'start';
         this.openSelect(side);
       });
     }
+    document.getElementById('open-online')!.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.enterOnline();
+    });
     this.setupSelectOverlay();
 
     // 墨色选择：为双方生成色板按钮
@@ -172,16 +188,28 @@ class Game {
     this.markCharacters();
 
     document.addEventListener('pointerlockchange', () => {
-      // 结算界面显示期间不弹开始覆盖层
-      startOverlay.classList.toggle(
-        'hidden',
-        this.input.pointerLocked || this.matchEnded
-      );
+      if (this.input.pointerLocked) {
+        this.showOverlay(null);
+        return;
+      }
+      // 结算界面 / 角色选择页显示期间不弹覆盖层
+      if (this.matchEnded || this.charSelect.active) return;
+      if (this.mode === 'online') {
+        this.showOverlay(this.session.matchActive ? 'enter' : 'online');
+      } else {
+        this.showOverlay('start');
+      }
     });
 
     document.getElementById('restart-btn')!.addEventListener('click', () => {
-      this.resetMatch();
+      if (this.mode === 'online') this.backToLobby();
+      else this.resetMatch();
     });
+  }
+
+  /** 焦点在文本框里时不响应游戏快捷键 */
+  private typingInInput(e: KeyboardEvent) {
+    return (e.target as HTMLElement)?.tagName === 'INPUT';
   }
 
   /** 统一入口：同步机器人参数、开始界面按钮选中态、HUD 徽章 */
@@ -242,17 +270,17 @@ class Game {
       side === 'player' ? this.playerChar : this.enemyChar,
       side === 'player' ? this.playerColor : this.enemyColor
     );
-    document.getElementById('start-overlay')!.classList.add('hidden');
-    document.getElementById('select-overlay')!.classList.remove('hidden');
-    document.getElementById('hud')!.classList.add('hidden');
+    // 联机大厅只能选自己的角色
+    document
+      .getElementById('select-tab-enemy')!
+      .classList.toggle('hidden', this.selectReturn === 'online');
+    this.showOverlay('select');
     this.refreshSelectUI();
   }
 
   private closeSelect() {
     this.charSelect.close();
-    document.getElementById('select-overlay')!.classList.add('hidden');
-    document.getElementById('hud')!.classList.remove('hidden');
-    document.getElementById('start-overlay')!.classList.remove('hidden');
+    this.showOverlay(this.selectReturn);
   }
 
   /** 刷新选择页的页签选中态与角色名 */
@@ -267,7 +295,7 @@ class Game {
     );
   }
 
-  /** 选角色：重建对应 avatar，清场重开一局 */
+  /** 选角色：重建对应 avatar；单机清场重开，联机同步到房间 */
   private pickCharacter(side: 'player' | 'enemy', key: ChiikawaCharacter) {
     if (side === 'player') {
       if (key === this.playerChar) return;
@@ -281,7 +309,12 @@ class Game {
       this.bot.setCharacter(CHARACTER_DEFS[key]);
     }
     this.markCharacters();
-    this.resetMatch();
+    if (this.mode === 'online') {
+      this.session.setLobby({ char: this.playerChar });
+      this.lobby.render(this.session.room, this.session.myId, this.playerChar, this.playerColor);
+    } else {
+      this.resetMatch();
+    }
   }
 
   /** 同步选择入口按钮文案与展示台台座发光 */
@@ -314,13 +347,9 @@ class Game {
 
   /** 同步墨色到 3D 材质、涂地系统、CSS 变量与色板选中态 */
   private applyColors() {
-    document.documentElement.style.setProperty('--player-color', this.playerColor);
-    document.documentElement.style.setProperty('--enemy-color', this.enemyColor);
-    this.inkSystem.setTeamColors(this.playerColor, this.enemyColor);
-    this.player.setColor(this.playerColor);
-    this.bot.setColor(this.enemyColor);
+    this.applyTeamColors(this.playerColor, this.enemyColor);
 
-    document.querySelectorAll<HTMLElement>('.swatches').forEach((row) => {
+    document.querySelectorAll<HTMLElement>('.swatches[data-team]').forEach((row) => {
       const selected = row.dataset.team === 'player' ? this.playerColor : this.enemyColor;
       row.querySelectorAll<HTMLElement>('.swatch').forEach((s) => {
         s.classList.toggle('selected', s.dataset.hex === selected);
@@ -330,14 +359,23 @@ class Game {
     this.markCharacters();
   }
 
+  /** 把一组本地语义的双方墨色应用到渲染/涂地/HUD（单机与联机共用） */
+  private applyTeamColors(player: string, enemy: string) {
+    document.documentElement.style.setProperty('--player-color', player);
+    document.documentElement.style.setProperty('--enemy-color', enemy);
+    this.inkSystem.setTeamColors(player, enemy);
+    this.player.setColor(player);
+    this.bot.setColor(enemy);
+  }
+
   private endMatch() {
     this.matchEnded = true;
     audio.whistle();
     audio.setSwimming(false);
     document.exitPointerLock();
     this.hud.showResult(this.inkSystem.getCoverage());
-    // exitPointerLock 是异步的，这里显式再藏一次开始覆盖层
-    document.getElementById('start-overlay')!.classList.add('hidden');
+    // exitPointerLock 是异步的，这里显式再藏一次覆盖层
+    this.showOverlay(null);
   }
 
   private resetMatch() {
@@ -348,26 +386,152 @@ class Game {
     this.lastTickSecond = -1;
     this.matchEnded = false;
     this.hud.hideResult();
-    document.getElementById('start-overlay')!.classList.remove('hidden');
+    this.hud.setBanner(null);
+    this.showOverlay('start');
   }
 
-  private loop = () => {
-    requestAnimationFrame(this.loop);
+  // ---------- 联机 ----------
 
-    // 限制 dt，避免切后台回来后瞬移
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+  private setupOnline() {
+    const s = this.session;
+    const l = this.lobby;
 
-    // 角色选择页：渲染选择场景，跳过游戏世界
-    if (this.charSelect.active) {
-      this.charSelect.update(dt);
-      this.sceneManager.renderer.render(this.charSelect.scene, this.charSelect.camera);
-      this.input.endFrame();
-      return;
+    l.onBack = () => this.leaveOnline();
+    l.onConnect = (url) => this.connectOnline(url);
+    l.onCreate = () => s.createRoom(this.playerChar, this.playerColor);
+    l.onJoin = (code) => s.joinRoom(code, this.playerChar, this.playerColor);
+    l.onReady = (ready) => s.setLobby({ ready });
+    l.onLeave = () => s.leaveRoom();
+    l.onOpenChar = () => {
+      this.selectReturn = 'online';
+      this.openSelect('player');
+    };
+    l.onColor = (hex) => {
+      this.playerColor = hex;
+      this.applyColors();
+      s.setLobby({ color: hex });
+      l.render(s.room, s.myId, this.playerChar, this.playerColor);
+    };
+
+    s.onStatus = (status) => l.setStatus(status);
+    s.onRoom = (room) => {
+      l.setError('');
+      l.render(room, s.myId, this.playerChar, this.playerColor);
+    };
+    s.onError = (code) => l.setError(l.errorText(code));
+    s.onStart = (colors) => this.startOnlineMatch(colors);
+    s.onEnd = (reason) => this.endOnlineMatch(reason);
+    s.onResult = (coverage) => {
+      this.hud.setBanner(null);
+      this.hud.showResult(coverage, t('backToRoom'));
+    };
+  }
+
+  private enterOnline() {
+    this.mode = 'online';
+    this.bot.group.visible = false;
+    this.hud.setNet(this.session.net.rtt);
+    this.lobby.render(null, '', this.playerChar, this.playerColor);
+    this.showOverlay('online');
+    if (!this.session.net.connected) this.connectOnline(this.lobby.serverUrl());
+  }
+
+  private async connectOnline(url: string) {
+    this.lobby.setError('');
+    await this.session.connect(url);
+  }
+
+  /** 退出联机回到单机：恢复机器人与单机配色 */
+  private leaveOnline() {
+    this.session.disconnect();
+    this.mode = 'solo';
+    this.bot.group.visible = true;
+    this.hud.setNet(null);
+    this.applyColors();
+    this.resetMatch();
+  }
+
+  private startOnlineMatch(colors: { player: string; enemy: string }) {
+    this.applyTeamColors(colors.player, colors.enemy);
+    this.inkSystem.reset();
+    this.player.reset();
+    this.matchEnded = false;
+    this.lastTickSecond = -1;
+    this.hud.hideResult();
+    this.showOverlay('enter');
+  }
+
+  private endOnlineMatch(reason: 'time' | 'left') {
+    this.matchEnded = true;
+    audio.whistle();
+    audio.setSwimming(false);
+    document.exitPointerLock();
+    this.showOverlay(null);
+    this.hud.setBanner(reason === 'left' ? t('opponentLeft') : t('waitingResult'));
+  }
+
+  private backToLobby() {
+    this.matchEnded = false;
+    this.hud.hideResult();
+    this.hud.setBanner(null);
+    this.lobby.render(this.session.room, this.session.myId, this.playerChar, this.playerColor);
+    this.showOverlay('online');
+  }
+
+  /** 联机对局的每帧逻辑 */
+  private updateOnline(dt: number) {
+    const s = this.session;
+    const live = s.matchActive && !this.matchEnded;
+
+    if (live && s.playing && this.input.pointerLocked) {
+      this.player.update(dt, this.input, this.inkSystem, s.nearestEnemyPos());
+    } else {
+      audio.setSwimming(false);
+    }
+    // 世界持续运转（远端子弹表现 / 粒子），即使自己释放了鼠标
+    if (live) this.inkSystem.update(dt, s.targets());
+    s.update(dt);
+
+    // 倒计时提示（覆盖层里与 HUD 上各一份）
+    const cd = live ? Math.ceil(s.countdown) : 0;
+    const cdEl = document.getElementById('enter-countdown')!;
+    cdEl.classList.toggle('hidden', cd <= 0);
+    if (cd > 0) {
+      cdEl.textContent = String(cd);
+      this.hud.setBanner(fmt('startsIn', { s: cd }));
+    } else if (live && !this.player.downed) {
+      this.hud.setBanner(null);
     }
 
-    const active = this.input.pointerLocked && !this.matchEnded;
+    // 最后 10 秒每秒嘀嗒
+    const sec = Math.ceil(s.timeLeft);
+    if (live && s.playing && sec <= 10 && sec >= 1 && sec !== this.lastTickSecond) {
+      this.lastTickSecond = sec;
+      audio.tick();
+    }
 
-    this.showcase.update(dt);
+    this.hud.setNet(s.net.rtt);
+    this.hud.update(this.player.ink, INK_MAX, this.player.form, this.player.hp, HP_MAX);
+    this.hud.setRespawn(this.player.downed ? this.player.respawnTimer : null);
+    this.minimap.update(
+      this.inkSystem.canvasEl,
+      this.player.getPosition(),
+      this.player.facingYaw,
+      this.playerColorInUse(),
+      s.markers()
+    );
+    this.hud.updateMatch(s.timeLeft, this.inkSystem.getCoverage());
+  }
+
+  /** 当前生效的己方墨色（联机开局后可能与单机选色不同） */
+  private playerColorInUse(): string {
+    return getComputedStyle(document.documentElement).getPropertyValue('--player-color').trim() ||
+      this.playerColor;
+  }
+
+  /** 单机对局的每帧逻辑 */
+  private updateSolo(dt: number) {
+    const active = this.input.pointerLocked && !this.matchEnded;
 
     if (active) {
       this.timeLeft -= dt;
@@ -396,25 +560,36 @@ class Game {
       audio.setSwimming(false);
     }
 
-    this.hud.update(
-      this.player.ink,
-      INK_MAX,
-      this.player.form,
-      this.player.hp,
-      HP_MAX
-    );
+    this.hud.update(this.player.ink, INK_MAX, this.player.form, this.player.hp, HP_MAX);
     this.hud.setRespawn(this.player.downed ? this.player.respawnTimer : null);
-
     this.minimap.update(
       this.inkSystem.canvasEl,
       this.player.getPosition(),
       this.player.facingYaw,
       this.playerColor,
-      this.bot.getPosition(),
-      this.bot.alive,
-      this.enemyColor
+      [{ pos: this.bot.getPosition(), color: this.enemyColor, visible: this.bot.alive }]
     );
     this.hud.updateMatch(this.timeLeft, this.inkSystem.getCoverage());
+  }
+
+  private loop = () => {
+    requestAnimationFrame(this.loop);
+
+    // 限制 dt，避免切后台回来后瞬移
+    const dt = Math.min(this.clock.getDelta(), 0.05);
+
+    // 角色选择页：渲染选择场景，跳过游戏世界
+    if (this.charSelect.active) {
+      this.charSelect.update(dt);
+      this.sceneManager.renderer.render(this.charSelect.scene, this.charSelect.camera);
+      this.input.endFrame();
+      return;
+    }
+
+    this.showcase.update(dt);
+
+    if (this.mode === 'online') this.updateOnline(dt);
+    else this.updateSolo(dt);
 
     this.sceneManager.render();
     this.input.endFrame();

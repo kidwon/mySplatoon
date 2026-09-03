@@ -7,6 +7,14 @@ const SIZE = 160;
  * 小地图：直接把 InkSystem 的涂地离屏 Canvas 缩放绘制到 HUD 角落，
  * 再叠加玩家（带朝向三角）与机器人的位置标记。
  */
+/** 小地图上的其他角色标记（机器人 / 远端玩家） */
+export interface MapMarker {
+  pos: THREE.Vector3;
+  color: string;
+  /** 倒地时不显示 */
+  visible: boolean;
+}
+
 export class Minimap {
   private canvas = document.getElementById('minimap') as HTMLCanvasElement;
   private ctx = this.canvas.getContext('2d')!;
@@ -16,9 +24,7 @@ export class Minimap {
     playerPos: THREE.Vector3,
     playerYaw: number,
     playerColor: string,
-    botPos: THREE.Vector3,
-    botAlive: boolean,
-    botColor: string
+    markers: MapMarker[]
   ) {
     const ctx = this.ctx;
     ctx.drawImage(inkCanvas, 0, 0, inkCanvas.width, inkCanvas.height, 0, 0, SIZE, SIZE);
@@ -35,7 +41,7 @@ export class Minimap {
       ctx.strokeRect(x, y, o.hx * 2 * s, o.hz * 2 * s);
     }
 
-    if (botAlive) this.drawDot(botPos, botColor);
+    for (const m of markers) if (m.visible) this.drawDot(m.pos, m.color);
     this.drawArrow(playerPos, playerYaw, playerColor);
   }
 

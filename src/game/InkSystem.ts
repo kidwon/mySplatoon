@@ -36,6 +36,8 @@ interface Bullet {
   age: number;
   team: Team;
   splatScale: number;
+  /** 纯表现子弹（远端玩家发射的回放）：不命中、不涂地，落地即消失 */
+  cosmetic: boolean;
 }
 
 interface Particle {
@@ -83,6 +85,8 @@ export class InkSystem {
 
   /** 命中回调：shooter 为开火方，killed 表示该发击倒了目标 */
   onTargetHit?: (shooter: Team, killed: boolean) => void;
+  /** 本地权威涂色回调（联机时转发给其他客户端）；远端回放的涂色不触发 */
+  onPaint?: (x: number, z: number, radius: number, team: Team) => void;
 
   /** 涂地离屏 Canvas（供小地图绘制） */
   get canvasEl(): HTMLCanvasElement {
@@ -199,7 +203,8 @@ export class InkSystem {
     origin: THREE.Vector3,
     direction: THREE.Vector3,
     team: Team,
-    splatScale = 1
+    splatScale = 1,
+    cosmetic = false
   ) {
     const mesh = new THREE.Mesh(this.bulletGeo, this.bulletMats[team]);
     mesh.position.copy(origin);
@@ -213,7 +218,7 @@ export class InkSystem {
       .multiplyScalar(BULLET_SPEED)
       .add(new THREE.Vector3(0, 2.5, 0));
 
-    this.bullets.push({ mesh, velocity, age: 0, team, splatScale });
+    this.bullets.push({ mesh, velocity, age: 0, team, splatScale, cosmetic });
   }
 
   update(dt: number, targets: HitTarget[] = []) {
@@ -229,9 +234,10 @@ export class InkSystem {
       const inArena =
         Math.abs(x) <= ARENA_HALF && Math.abs(z) <= ARENA_HALF;
 
-      // 命中敌对角色：结算伤害 + 迸溅 + 脚下小墨迹
+      // 命中敌对角色：结算伤害 + 迸溅 + 脚下小墨迹（表现子弹不参与）
       let hitSomeone = false;
       for (const target of targets) {
+        if (b.cosmetic) break;
         if (target.team === b.team || !target.alive) continue;
         const tp = target.getPosition();
         const dx = x - tp.x;
@@ -275,10 +281,12 @@ export class InkSystem {
       }
       if (hitObstacle) continue;
 
-      // 落地：涂色并移除
+      // 落地：涂色并移除（表现子弹只播溅落声，涂色由发射方的 paint 消息驱动）
       if (y <= 0.1 && inArena) {
-        this.paintSplat(x, z, (1.1 + Math.random() * 0.8) * b.splatScale, b.team);
-        painted = true;
+        if (!b.cosmetic) {
+          this.paintSplat(x, z, (1.1 + Math.random() * 0.8) * b.splatScale, b.team);
+          painted = true;
+        }
         audio.splat();
         this.removeBullet(i);
         continue;
@@ -341,6 +349,17 @@ export class InkSystem {
    * 同时把主斑范围写入覆盖率网格。
    */
   paintSplat(worldX: number, worldZ: number, radiusWorld: number, team: Team) {
+    this.drawSplat(worldX, worldZ, radiusWorld, team);
+    this.onPaint?.(worldX, worldZ, radiusWorld, team);
+  }
+
+  /** 应用远端玩家的涂色（不再向外广播）；调用方负责随后刷新纹理 */
+  applyRemotePaint(worldX: number, worldZ: number, radiusWorld: number, team: Team) {
+    this.drawSplat(worldX, worldZ, radiusWorld, team);
+    this.texture.needsUpdate = true;
+  }
+
+  private drawSplat(worldX: number, worldZ: number, radiusWorld: number, team: Team) {
     const { px, py } = this.worldToTex(worldX, worldZ);
     const r = radiusWorld * WORLD_TO_TEX;
     const ctx = this.ctx;

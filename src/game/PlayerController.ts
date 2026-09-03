@@ -71,6 +71,26 @@ export class PlayerController implements HitTarget {
   private groundInk: Team | null = null;
   private flashTimer = 0;
 
+  /** 出生点与初始朝向（联机时按队伍/席位设置） */
+  private spawn = { x: 0, z: 18, yaw: 0 };
+
+  /** 开火钩子（联机时广播给其他客户端）：枪口世界坐标 + 方向（已归一化） */
+  onFire?: (origin: THREE.Vector3, dir: THREE.Vector3) => void;
+  /** 被击倒钩子（联机时广播 ko 事件，参数为倒地位置） */
+  onKnockout?: (pos: THREE.Vector3) => void;
+  /** 本帧是否在己方墨中潜行（对敌方近乎隐身） */
+  get swimming() {
+    return this.form === 'squid' && this.onOwnInk;
+  }
+  /** 是否着地（供状态快照） */
+  get isGrounded() {
+    return this.grounded;
+  }
+  /** 本帧移动速度（供状态快照） */
+  get moveSpeed() {
+    return this.currentSpeed;
+  }
+
   /** 当前视角朝向（供小地图） */
   get facingYaw() {
     return this.yaw;
@@ -115,8 +135,13 @@ export class PlayerController implements HitTarget {
     this.avatar = new CharacterAvatar(def, this.teamColor);
     this.group.add(this.avatar.group);
 
-    this.group.position.set(0, 0, 18);
+    this.group.position.set(this.spawn.x, 0, this.spawn.z);
     scene.add(this.group);
+  }
+
+  /** 设置出生点（下次 reset / respawn 生效） */
+  setSpawn(x: number, z: number, yaw: number) {
+    this.spawn = { x, z, yaw };
   }
 
   /** 更换队伍墨色（围巾 + 武器墨色部件，不染角色本体） */
@@ -159,12 +184,14 @@ export class PlayerController implements HitTarget {
     this.downed = true;
     this.respawnTimer = RESPAWN_TIME;
     this.group.visible = false;
+    this.onKnockout?.(this.group.position);
   }
 
   private respawn() {
     this.downed = false;
     this.group.visible = true;
-    this.group.position.set(0, 0, 18);
+    this.group.position.set(this.spawn.x, 0, this.spawn.z);
+    this.yaw = this.spawn.yaw;
     this.velocityY = 0;
     this.hp = HP_MAX;
     this.ink = INK_MAX;
@@ -174,8 +201,8 @@ export class PlayerController implements HitTarget {
 
   /** 回到开局状态 */
   reset() {
-    this.group.position.set(0, 0, 18);
-    this.yaw = 0;
+    this.group.position.set(this.spawn.x, 0, this.spawn.z);
+    this.yaw = this.spawn.yaw;
     this.pitch = -0.25;
     this.velocityY = 0;
     this.grounded = true;
@@ -350,6 +377,7 @@ export class PlayerController implements HitTarget {
 
     inkSystem.spawnBullet(muzzle, shootDir, 'player');
     audio.shoot();
+    this.onFire?.(muzzle, shootDir.normalize());
   }
 
   // ---------- 墨水槽 ----------

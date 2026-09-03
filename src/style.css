@@ -484,3 +484,201 @@ body {
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.75);
   transform: scale(1.12);
 }
+
+/* ---------- 联机 ---------- */
+#net-badge {
+  position: absolute;
+  top: 18px;
+  right: 24px;
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+#net-badge.bad {
+  color: #f75c4c;
+}
+#net-badge.hidden,
+#difficulty-badge.hidden {
+  display: none;
+}
+
+#online-overlay,
+#enter-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 8, 20, 0.78);
+  backdrop-filter: blur(4px);
+  color: #fff;
+}
+#online-overlay.hidden,
+#enter-overlay.hidden,
+#online-entry.hidden,
+#online-room.hidden {
+  display: none;
+}
+#online-overlay .panel,
+#enter-overlay .panel {
+  text-align: center;
+  min-width: 420px;
+}
+#online-overlay h1,
+#enter-overlay h1 {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #29d9c2;
+  text-shadow: 0 0 22px rgba(41, 217, 194, 0.55);
+  margin-bottom: 10px;
+}
+#online-status {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 18px;
+}
+#online-status.ok {
+  color: #4cd964;
+}
+#online-status.bad {
+  color: #f75c4c;
+}
+.online-input {
+  padding: 8px 12px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  outline: none;
+  text-transform: uppercase;
+  width: 140px;
+  text-align: center;
+}
+.online-input.server {
+  width: 300px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.online-input:focus {
+  border-color: #29d9c2;
+}
+#online-room-code {
+  font-size: 44px;
+  font-weight: 900;
+  letter-spacing: 10px;
+  color: #fff;
+  margin: 4px 0 2px;
+  text-shadow: 0 0 18px rgba(41, 217, 194, 0.6);
+}
+.room-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 16px;
+}
+#online-players {
+  list-style: none;
+  margin: 0 auto 18px;
+  width: 360px;
+  text-align: left;
+}
+#online-players li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 15px;
+}
+#online-players li.me {
+  border-color: rgba(41, 217, 194, 0.6);
+}
+#online-players li.empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+#online-players .dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+#online-players .name {
+  flex: 1;
+}
+#online-players .tag {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+#online-players .ready {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4cd964;
+}
+#online-players .ready.no {
+  color: rgba(255, 255, 255, 0.4);
+}
+#online-ready.selected {
+  background: #4cd964;
+  border-color: #4cd964;
+  box-shadow: 0 0 14px rgba(76, 217, 100, 0.55);
+}
+.swatch.taken {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+#online-error {
+  min-height: 18px;
+  font-size: 13px;
+  color: #f75c4c;
+  margin-top: 6px;
+}
+#enter-overlay {
+  cursor: pointer;
+}
+#enter-overlay p {
+  font-size: 18px;
+}
+#enter-overlay .sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+#enter-countdown {
+  font-size: 72px;
+  font-weight: 900;
+  color: #fff;
+  margin: 10px 0;
+  text-shadow: 0 0 24px rgba(41, 217, 194, 0.7);
+}
+#enter-countdown.hidden {
+  display: none;
+}
+#start-overlay #open-online {
+  border-color: #29d9c2;
+  color: #29d9c2;
+}
+#start-overlay #open-online:hover {
+  background: rgba(41, 217, 194, 0.2);
+  color: #fff;
+}
+#select-tab-enemy.hidden {
+  display: none;
+}

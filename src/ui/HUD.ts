@@ -24,6 +24,7 @@ export class HUD {
   private difficultyBadge = document.getElementById(
     'difficulty-badge'
   ) as HTMLDivElement;
+  private netBadge = document.getElementById('net-badge') as HTMLDivElement;
 
   private hpBar = document.getElementById('hp-bar') as HTMLDivElement;
   private respawnMsg = document.getElementById('respawn-msg') as HTMLDivElement;
@@ -51,10 +52,24 @@ export class HUD {
     }
   }
 
+  private banner: string | null = null;
+
+  /** 屏幕中央横幅（联机倒计时 / 等待结算）；传 null 清除。倒地提示优先级更高 */
+  setBanner(text: string | null) {
+    this.banner = text;
+    if (text !== null) {
+      this.respawnMsg.classList.remove('hidden');
+      this.respawnMsg.textContent = text;
+    } else {
+      this.respawnMsg.classList.add('hidden');
+    }
+  }
+
   /** 倒地重生倒计时；传 null 隐藏 */
   setRespawn(secondsLeft: number | null) {
     if (secondsLeft === null) {
-      this.respawnMsg.classList.add('hidden');
+      if (this.banner === null) this.respawnMsg.classList.add('hidden');
+      else this.respawnMsg.textContent = this.banner;
     } else {
       this.respawnMsg.classList.remove('hidden');
       this.respawnMsg.textContent = fmt('respawnMsg', {
@@ -84,6 +99,20 @@ export class HUD {
     }
   }
 
+  /** 联机延迟徽章；传 null 隐藏（单机）。同时隐藏无意义的难度徽章 */
+  setNet(rttMs: number | null) {
+    if (rttMs === null) {
+      this.netBadge.classList.add('hidden');
+      this.difficultyBadge.classList.remove('hidden');
+      return;
+    }
+    this.netBadge.classList.remove('hidden');
+    this.difficultyBadge.classList.add('hidden');
+    const ms = Math.round(rttMs);
+    this.netBadge.textContent = `${t('ping')}: ${ms} ms`;
+    this.netBadge.classList.toggle('bad', ms > 150);
+  }
+
   /** 语言切换后调用：强制重刷带缓存的文案 */
   refreshLocale() {
     this.lastForm = null;
@@ -105,7 +134,8 @@ export class HUD {
     );
   }
 
-  showResult(coverage: Coverage) {
+  showResult(coverage: Coverage, restartLabel = t('restart')) {
+    (document.getElementById('restart-btn') as HTMLButtonElement).textContent = restartLabel;
     const p = coverage.player * 100;
     const e = coverage.enemy * 100;
     const win = p > e;
