@@ -72,6 +72,26 @@ export const CHARACTER_DEFS: Record<ChiikawaCharacter, CharacterDef> = {
     height: 1.3,
     camHeight: 1.1,
   },
+  onizaru: {
+    key: 'onizaru',
+    createModel: CHIIKAWA_FACTORIES.onizaru,
+    createWeapon: WEAPON_FACTORIES.onizaru,
+    scarfY: 0.92,
+    scarfRadius: 0.27,
+    radius: 0.52,
+    height: 1.62,
+    camHeight: 1.3,
+  },
+  doro: {
+    key: 'doro',
+    createModel: CHIIKAWA_FACTORIES.doro,
+    createWeapon: WEAPON_FACTORIES.doro,
+    scarfY: 0.6,
+    scarfRadius: 0.34,
+    radius: 0.46,
+    height: 1.25,
+    camHeight: 1.05,
+  },
 };
 
 export const CHARACTER_KEYS = Object.keys(CHARACTER_DEFS) as ChiikawaCharacter[];

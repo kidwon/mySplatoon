@@ -46,6 +46,23 @@
       </div>
     </div>
 
+    <!-- 角色选择页（3D 场景由主渲染器绘制，此处仅 UI 浮层） -->
+    <div id="select-overlay" class="hidden">
+      <div class="select-tabs">
+        <button id="select-tab-player" class="opt-btn" data-i18n="yourChar"></button>
+        <button id="select-tab-enemy" class="opt-btn" data-i18n="enemyChar"></button>
+      </div>
+      <button id="select-prev" class="select-arrow">&#9664;</button>
+      <button id="select-next" class="select-arrow">&#9654;</button>
+      <div class="select-bottom">
+        <div id="select-name"></div>
+        <div class="select-actions">
+          <button id="select-confirm" class="opt-btn" data-i18n="selectConfirm"></button>
+          <button id="select-back" class="opt-btn" data-i18n="selectBack"></button>
+        </div>
+      </div>
+    </div>
+
     <!-- 对战结算 -->
     <div id="result-overlay" class="hidden">
       <div class="panel">
@@ -66,12 +83,8 @@
           <button class="opt-btn lang-btn" data-lang="en">English</button>
         </div>
         <div class="option-row">
-          <span class="label" data-i18n="yourChar"></span>
-          <span class="char-buttons" data-side="player"></span>
-        </div>
-        <div class="option-row">
-          <span class="label" data-i18n="enemyChar"></span>
-          <span class="char-buttons" data-side="enemy"></span>
+          <button id="open-select-player" class="opt-btn"></button>
+          <button id="open-select-enemy" class="opt-btn"></button>
         </div>
         <div class="option-row color-row">
           <span class="label" data-i18n="yourColor"></span>

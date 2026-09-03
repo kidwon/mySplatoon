@@ -2,18 +2,15 @@ import * as THREE from 'three';
 import { SceneManager } from './game/SceneManager';
 import { PlayerController, INK_MAX, HP_MAX } from './game/PlayerController';
 import { InkSystem, Team, DEFAULT_TEAM_COLORS } from './game/InkSystem';
-import {
-  CHARACTER_DEFS,
-  CHARACTER_KEYS,
-  isCharacterKey,
-} from './game/models/characters';
+import { CHARACTER_DEFS, isCharacterKey } from './game/models/characters';
 import type { ChiikawaCharacter } from './game/models/chiikawa';
 import { EnemyBot, BotDifficulty } from './game/EnemyBot';
 import { ModelShowcase } from './game/ModelShowcase';
 import { Input } from './game/Input';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
-import { applyStatic, getLang, setLang, Lang } from './ui/i18n';
+import { CharacterSelect } from './ui/CharacterSelect';
+import { applyStatic, getLang, setLang, Lang, t } from './ui/i18n';
 import { audio } from './game/AudioManager';
 
 /** 一局时长（秒） */
@@ -42,6 +39,7 @@ class Game {
   private hud: HUD;
   private minimap = new Minimap();
   private showcase!: ModelShowcase;
+  private charSelect = new CharacterSelect();
   private clock = new THREE.Clock();
   private lastTickSecond = -1;
 
@@ -139,23 +137,17 @@ class Game {
         setLang(btn.dataset.lang as Lang);
         markLang();
         this.hud.refreshLocale();
+        this.markCharacters(); // 入口按钮文案是动态拼接的，需手动刷新
       });
     });
-    // 角色选择：为双方生成角色按钮（data-i18n 由 applyStatic 统一填充文案）
-    startOverlay.querySelectorAll<HTMLElement>('.char-buttons').forEach((row) => {
-      const side = row.dataset.side as 'player' | 'enemy';
-      for (const key of CHARACTER_KEYS) {
-        const btn = document.createElement('button');
-        btn.className = 'opt-btn char-btn';
-        btn.dataset.char = key;
-        btn.dataset.i18n = `char_${key}`;
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this.pickCharacter(side, key);
-        });
-        row.appendChild(btn);
-      }
-    });
+    // 角色选择页入口（按钮文案显示当前选择，由 markCharacters 刷新）
+    for (const side of ['player', 'enemy'] as const) {
+      document.getElementById(`open-select-${side}`)!.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openSelect(side);
+      });
+    }
+    this.setupSelectOverlay();
 
     // 墨色选择：为双方生成色板按钮
     startOverlay.querySelectorAll<HTMLElement>('.swatches').forEach((row) => {
@@ -202,6 +194,79 @@ class Game {
     this.hud.showDifficulty(difficulty, flash);
   }
 
+  /** 角色选择页：页签 / 箭头 / 确认 / 返回 / 拖拽旋转 */
+  private setupSelectOverlay() {
+    const overlay = document.getElementById('select-overlay')!;
+
+    for (const side of ['player', 'enemy'] as const) {
+      document.getElementById(`select-tab-${side}`)!.addEventListener('click', () => {
+        this.charSelect.side = side;
+        this.charSelect.setPreview(
+          side === 'player' ? this.playerChar : this.enemyChar,
+          side === 'player' ? this.playerColor : this.enemyColor
+        );
+        this.refreshSelectUI();
+      });
+    }
+    document.getElementById('select-prev')!.addEventListener('click', () => {
+      this.charSelect.cycle(-1);
+      this.refreshSelectUI();
+    });
+    document.getElementById('select-next')!.addEventListener('click', () => {
+      this.charSelect.cycle(1);
+      this.refreshSelectUI();
+    });
+    document.getElementById('select-confirm')!.addEventListener('click', () => {
+      this.pickCharacter(this.charSelect.side, this.charSelect.previewKey);
+      this.closeSelect();
+    });
+    document.getElementById('select-back')!.addEventListener('click', () => this.closeSelect());
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Escape' && this.charSelect.active) this.closeSelect();
+    });
+
+    // 拖拽旋转（按在按钮上不触发）
+    overlay.addEventListener('mousedown', (e) => {
+      if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+      this.charSelect.setDragging(true);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (this.charSelect.active) this.charSelect.rotateBy(e.movementX * 0.008);
+    });
+    window.addEventListener('mouseup', () => this.charSelect.setDragging(false));
+  }
+
+  private openSelect(side: 'player' | 'enemy') {
+    this.charSelect.open(
+      side,
+      side === 'player' ? this.playerChar : this.enemyChar,
+      side === 'player' ? this.playerColor : this.enemyColor
+    );
+    document.getElementById('start-overlay')!.classList.add('hidden');
+    document.getElementById('select-overlay')!.classList.remove('hidden');
+    document.getElementById('hud')!.classList.add('hidden');
+    this.refreshSelectUI();
+  }
+
+  private closeSelect() {
+    this.charSelect.close();
+    document.getElementById('select-overlay')!.classList.add('hidden');
+    document.getElementById('hud')!.classList.remove('hidden');
+    document.getElementById('start-overlay')!.classList.remove('hidden');
+  }
+
+  /** 刷新选择页的页签选中态与角色名 */
+  private refreshSelectUI() {
+    for (const side of ['player', 'enemy'] as const) {
+      document
+        .getElementById(`select-tab-${side}`)!
+        .classList.toggle('selected', this.charSelect.side === side);
+    }
+    document.getElementById('select-name')!.textContent = t(
+      `char_${this.charSelect.previewKey}`
+    );
+  }
+
   /** 选角色：重建对应 avatar，清场重开一局 */
   private pickCharacter(side: 'player' | 'enemy', key: ChiikawaCharacter) {
     if (side === 'player') {
@@ -219,14 +284,14 @@ class Game {
     this.resetMatch();
   }
 
-  /** 同步角色按钮选中态与展示台台座发光 */
+  /** 同步选择入口按钮文案与展示台台座发光 */
   private markCharacters() {
-    document.querySelectorAll<HTMLElement>('.char-buttons').forEach((row) => {
-      const selected = row.dataset.side === 'player' ? this.playerChar : this.enemyChar;
-      row.querySelectorAll<HTMLElement>('.char-btn').forEach((b) => {
-        b.classList.toggle('selected', b.dataset.char === selected);
-      });
-    });
+    document.getElementById('open-select-player')!.textContent = `${t('yourChar')}: ${t(
+      `char_${this.playerChar}`
+    )}`;
+    document.getElementById('open-select-enemy')!.textContent = `${t('enemyChar')}: ${t(
+      `char_${this.enemyChar}`
+    )}`;
     // 台座发光：对手先写、玩家后写——双方同角色时玩家色优先
     const highlights: Partial<Record<ChiikawaCharacter, string>> = {};
     highlights[this.enemyChar] = this.enemyColor;
@@ -291,6 +356,15 @@ class Game {
 
     // 限制 dt，避免切后台回来后瞬移
     const dt = Math.min(this.clock.getDelta(), 0.05);
+
+    // 角色选择页：渲染选择场景，跳过游戏世界
+    if (this.charSelect.active) {
+      this.charSelect.update(dt);
+      this.sceneManager.renderer.render(this.charSelect.scene, this.charSelect.camera);
+      this.input.endFrame();
+      return;
+    }
+
     const active = this.input.pointerLocked && !this.matchEnded;
 
     this.showcase.update(dt);

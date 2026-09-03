@@ -29,9 +29,11 @@ export class CharacterAvatar {
   constructor(def: CharacterDef, teamColor: string) {
     this.def = def;
     this.group = def.createModel();
-    // 材质按实例克隆（预置 transparent，闪白/淡出不跨实例污染）
+    // 材质按实例克隆（预置 transparent，闪白/淡出不跨实例污染；含隐藏的替代形态）
     this.modelMats = instantiateMaterials(this.group);
-    this.scarfMat = addTeamScarf(this.group, def.scarfY, def.scarfRadius, teamColor);
+    // 有替代乌贼形态的角色把围巾挂在人形组上（随形态一起隐藏，不悬空）
+    const scarfParent = (this.group.userData.humanForm as THREE.Group | undefined) ?? this.group;
+    this.scarfMat = addTeamScarf(scarfParent, def.scarfY, def.scarfRadius, teamColor);
     this.weapon = def.createWeapon(teamColor);
     attachWeapon(this.group, this.weapon);
     // 收集武器全部材质（本就按实例新建），预置 transparent 供淡出
@@ -68,11 +70,20 @@ export class CharacterAvatar {
     for (const m of this.weaponMats) m.opacity = opacity;
   }
 
-  /** 乌贼形态：整体压扁 + 收起武器 */
+  /**
+   * 乌贼形态：默认整体压扁 + 收起武器；
+   * 模型若自带替代形态（userData.humanForm/squidForm，如 Doro 的四脚姿势）
+   * 则改为切换两个形态的可见性。
+   */
   setSquid(on: boolean) {
     if (on === this.squid) return;
     this.squid = on;
-    if (on) {
+    const humanForm = this.group.userData.humanForm as THREE.Group | undefined;
+    const squidForm = this.group.userData.squidForm as THREE.Group | undefined;
+    if (humanForm && squidForm) {
+      humanForm.visible = !on;
+      squidForm.visible = on;
+    } else if (on) {
       this.group.scale.copy(SQUID_SCALE);
     } else {
       this.group.scale.set(1, 1, 1);

@@ -9,6 +9,8 @@ const SHOWCASE_INK: Record<ChiikawaCharacter, string> = {
   usagi: '#69C25A',
   shisa: '#4AC2B8',
   nikori: '#F04C93',
+  onizaru: '#F2C230',
+  doro: '#9B6BD8',
 };
 
 /**
@@ -20,10 +22,10 @@ export class ModelShowcase {
   private pedestalMats = new Map<ChiikawaCharacter, THREE.MeshStandardMaterial>();
 
   constructor(scene: THREE.Scene) {
-    const lineup: ChiikawaCharacter[] = ['chiikawa', 'hachiware', 'nikori', 'usagi', 'shisa'];
+    const lineup: ChiikawaCharacter[] = ['chiikawa', 'hachiware', 'nikori', 'doro', 'onizaru', 'usagi', 'shisa'];
 
     lineup.forEach((key, i) => {
-      const x = (i - 2) * 2.8;
+      const x = (i - (lineup.length - 1) / 2) * 2.8;
       // 每台座独立材质，供选中发光
       const pedestalMat = new THREE.MeshStandardMaterial({
         color: 0x4d4968,

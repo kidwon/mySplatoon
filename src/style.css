@@ -393,14 +393,73 @@ body {
   margin-bottom: 22px;
 }
 
-/* 角色选择 */
-.char-buttons {
-  display: flex;
-  gap: 6px;
+/* ---------- 角色选择页 ---------- */
+#hud.hidden {
+  display: none;
 }
-.char-buttons .opt-btn {
-  padding: 6px 12px;
-  font-size: 13px;
+#select-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+}
+#select-overlay.hidden {
+  display: none;
+}
+.select-tabs {
+  position: absolute;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+}
+.select-tabs .opt-btn.selected {
+  background: #9b51e0;
+  border-color: #9b51e0;
+}
+.select-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.select-arrow:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-50%) scale(1.08);
+}
+#select-prev {
+  left: 8%;
+}
+#select-next {
+  right: 8%;
+}
+.select-bottom {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+#select-name {
+  color: #fff;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  margin-bottom: 18px;
+  text-shadow: 0 0 18px rgba(155, 81, 224, 0.6), 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+.select-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }
 
 /* 墨色选择 */

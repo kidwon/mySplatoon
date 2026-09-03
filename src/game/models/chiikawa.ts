@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { createNikoriModel } from './nikori';
+import { createOnizaruModel } from './onizaru';
+import { createDoroModel } from './doro';
 
 /**
  * ちいかわ角色组 — 程序化 Three.js 模型（依据 img2threejs 风格参考图重建）。
@@ -503,6 +505,8 @@ export const CHIIKAWA_FACTORIES = {
   usagi: createUsagiModel,
   shisa: createShisaModel,
   nikori: createNikoriModel,
+  onizaru: createOnizaruModel,
+  doro: createDoroModel,
 } as const;
 
 export type ChiikawaCharacter = keyof typeof CHIIKAWA_FACTORIES;

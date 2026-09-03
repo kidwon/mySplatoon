@@ -178,6 +178,81 @@ export function createShavedIceWeapon(inkColor: string): WeaponBuild {
   return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, 0.22, -0.02) };
 }
 
+/** 香蕉喷射枪（オニザル专属）：剥开的香蕉，果肉换成墨色喷嘴 */
+export function createBananaBlaster(inkColor: string): WeaponBuild {
+  const g = new THREE.Group();
+  g.name = 'weapon-banana';
+  const ink = inkMat(inkColor);
+  const peel = solid('#F2D041');
+  const peelDark = solid('#D9B32E');
+
+  // 香蕉主体：两段胶囊拼出弯曲弧度，尾端褐色果柄
+  const seg1 = mesh('banana-body-1', new THREE.CapsuleGeometry(0.06, 0.16, 4, 12), peel, 0, 0.03, -0.08);
+  seg1.rotation.x = Math.PI / 2 - 0.25;
+  g.add(seg1);
+  const seg2 = mesh('banana-body-2', new THREE.CapsuleGeometry(0.055, 0.14, 4, 12), peel, 0, 0.08, -0.24);
+  seg2.rotation.x = Math.PI / 2 + 0.2;
+  g.add(seg2);
+  g.add(mesh('banana-stem', new THREE.CylinderGeometry(0.018, 0.024, 0.06, 8), solid('#7A5230'), 0, -0.01, 0.03, 0.9));
+
+  // 枪口处剥开的三片果皮，外翻
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
+    const flap = mesh(
+      `peel-flap-${i}`,
+      new THREE.SphereGeometry(0.05, 10, 8),
+      peelDark,
+      Math.cos(a) * 0.075,
+      0.1 + Math.sin(a) * 0.075,
+      -0.31
+    );
+    flap.scale.set(0.9, 0.9, 1.7);
+    flap.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6);
+    g.add(flap);
+  }
+
+  // 墨色"果肉"喷嘴（跟随队伍色）
+  g.add(mesh('ink-flesh', new THREE.SphereGeometry(0.048, 10, 8), ink, 0, 0.1, -0.32));
+  g.add(mesh('ink-tip', new THREE.ConeGeometry(0.04, 0.09, 10), ink, 0, 0.1, -0.38, -Math.PI / 2));
+
+  return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, 0.1, -0.42) };
+}
+
+/** 蝴蝶结喷射枪（Doro 专属）：金芯枪管 + 紫色双结环 + 垂带 + 墨色喷尖 */
+export function createBowBlaster(inkColor: string): WeaponBuild {
+  const g = new THREE.Group();
+  g.name = 'weapon-bow-blaster';
+  const ink = inkMat(inkColor);
+  const purple = solid('#8C6BC8');
+  const gold = solid('#E8C24A');
+
+  g.add(mesh('grip', new THREE.BoxGeometry(0.055, 0.14, 0.07), solid(DARK_GRAY), 0, -0.05, 0.05, 0.25));
+  // 金色枪管（蝴蝶结的"金芯"延长成炮管）
+  const barrel = mesh('barrel', new THREE.CylinderGeometry(0.05, 0.06, 0.28, 12), gold, 0, 0.05, -0.08);
+  barrel.rotation.x = Math.PI / 2;
+  g.add(barrel);
+  // 紫色蝴蝶结双环：扁球斜置在枪管两侧
+  for (const side of [-1, 1]) {
+    const loop = mesh('bow-loop', new THREE.SphereGeometry(0.075, 12, 8), purple, side * 0.1, 0.06, 0.02);
+    loop.scale.set(1.5, 0.95, 0.55);
+    loop.rotation.z = side * 0.5;
+    g.add(loop);
+  }
+  g.add(mesh('bow-knot', new THREE.SphereGeometry(0.05, 10, 8), gold, 0, 0.06, 0.02));
+  // 两条紫色垂带
+  for (const side of [-1, 1]) {
+    const tail = mesh('bow-tail', new THREE.SphereGeometry(0.04, 10, 8), purple, side * 0.05, -0.06, 0.06);
+    tail.scale.set(0.7, 1.8, 0.5);
+    tail.rotation.z = side * 0.25;
+    g.add(tail);
+  }
+  // 墨色喷尖（跟随队伍色）
+  g.add(mesh('ink-collar', new THREE.CylinderGeometry(0.055, 0.045, 0.06, 12), ink, 0, 0.05, -0.24, Math.PI / 2));
+  g.add(mesh('ink-tip', new THREE.ConeGeometry(0.05, 0.1, 12), ink, 0, 0.05, -0.3, -Math.PI / 2));
+
+  return { group: g, inkMats: [ink], muzzle: new THREE.Vector3(0, 0.05, -0.36) };
+}
+
 /** 角色 ↔ 武器的官方配对（参考图） */
 export const WEAPON_FACTORIES = {
   chiikawa: createInkShooter,
@@ -185,6 +260,8 @@ export const WEAPON_FACTORIES = {
   usagi: createSlosherWasher,
   shisa: createInkCharger,
   nikori: createShavedIceWeapon,
+  onizaru: createBananaBlaster,
+  doro: createBowBlaster,
 } as const;
 
 /** 把武器挂到角色的 handSocket 上 */
