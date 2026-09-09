@@ -6,9 +6,14 @@
  * - 对局内消息附加 from/seq 后转发给房间内其他人
  * - 时钟同步（ping/pong）
  *
- * 运行：npm run server（端口可用 PORT 环境变量覆盖）
+ * 同一端口同时托管构建好的前端（dist/），局域网内任意设备打开
+ * http://<本机IP>:8787 即可加入；客户端默认连同源 /ws。
+ *
+ * 运行：npm run lan（构建 + 启动）或 npm run server（仅启动）。
+ * 环境变量：PORT 端口（默认 8787），HOST 绑定地址（默认 0.0.0.0），MATCH_MS 一局时长（测试用）。
  */
 import { WebSocketServer, WebSocket } from 'ws';
+import { createHttpServer, printLanBanner } from './lan';
 import {
   ClientMsg,
   ServerMsg,
@@ -262,7 +267,10 @@ function log(s: string) {
 const port = Number(process.env.PORT) || DEFAULT_PORT;
 /** 测试用：MATCH_MS 环境变量可缩短一局时长 */
 const matchDuration = Number(process.env.MATCH_MS) || MATCH_DURATION_MS;
-const wss = new WebSocketServer({ port });
+const host = process.env.HOST || '0.0.0.0';
+const httpServer = createHttpServer();
+// 挂在 http 服务器上，不限制路径：/ws（同源默认）与 /（旧客户端）都接受
+const wss = new WebSocketServer({ server: httpServer });
 
 wss.on('connection', (ws) => {
   const client: Client = { id: `p${nextClientId++}`, ws, room: null, info: null };
@@ -287,4 +295,12 @@ wss.on('connection', (ws) => {
   ws.on('error', () => {});
 });
 
-log(`relay server listening on ws://0.0.0.0:${port}`);
+httpServer.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') log(`port ${port} is in use — set PORT=xxxx to use another port`);
+  else log(`server error: ${err.message}`);
+  process.exit(1);
+});
+httpServer.listen(port, host, () => {
+  log(`relay + static server listening on ${host}:${port}`);
+  printLanBanner(port, log);
+});

@@ -33,6 +33,8 @@ export class OnlineLobby {
   private waitEl = document.getElementById('online-wait')!;
   private errorEl = document.getElementById('online-error')!;
   private swatchesEl = document.getElementById('online-swatches')!;
+  private lanEl = document.getElementById('online-lan')!;
+  private lanListEl = document.getElementById('online-lan-list')!;
 
   private status: NetStatus = 'idle';
   private room: RoomState | null = null;
@@ -46,7 +48,9 @@ export class OnlineLobby {
 
     document.getElementById('online-back')!.addEventListener('click', () => this.onBack?.());
     document.getElementById('online-connect')!.addEventListener('click', () => {
-      localStorage.setItem(SERVER_KEY, this.serverUrl());
+      // 只记住用户手改过的地址；默认（同源）不落盘，换网络/端口后仍能自动指向正确服务器
+      if (this.serverUrl() === defaultServerUrl()) localStorage.removeItem(SERVER_KEY);
+      else localStorage.setItem(SERVER_KEY, this.serverUrl());
       this.onConnect?.(this.serverUrl());
     });
     document.getElementById('online-create')!.addEventListener('click', () => this.onCreate?.());
@@ -110,6 +114,28 @@ export class OnlineLobby {
 
   setError(text: string) {
     this.errorEl.textContent = text;
+  }
+
+  /**
+   * 向同源 /info 询问服务器所在机器的局域网地址，展示为"其他设备打开"的链接列表。
+   * 端口取当前页面端口（开发 5173 / 生产 8787 均正确）。拿不到（线上部署、旧服务器）就隐藏。
+   */
+  async loadLanAddresses() {
+    try {
+      const res = await fetch('/info', { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      const { addresses } = (await res.json()) as { addresses: string[] };
+      const port = location.port ? `:${location.port}` : '';
+      this.lanListEl.innerHTML = '';
+      for (const a of addresses) {
+        const li = document.createElement('li');
+        li.textContent = `${location.protocol}//${a}${port}`;
+        this.lanListEl.appendChild(li);
+      }
+      this.lanEl.classList.toggle('hidden', addresses.length === 0);
+    } catch {
+      this.lanEl.classList.add('hidden');
+    }
   }
 
   /** 按房间状态重绘（room 为 null = 未入房） */

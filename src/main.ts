@@ -432,6 +432,7 @@ class Game {
     this.bot.group.visible = false;
     this.hud.setNet(this.session.net.rtt);
     this.lobby.render(null, '', this.playerChar, this.playerColor);
+    this.lobby.loadLanAddresses();
     this.showOverlay('online');
     if (!this.session.net.connected) this.connectOnline(this.lobby.serverUrl());
   }

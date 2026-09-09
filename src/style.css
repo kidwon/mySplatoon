@@ -523,6 +523,7 @@ body {
 #online-overlay.hidden,
 #enter-overlay.hidden,
 #online-entry.hidden,
+#online-lan.hidden,
 #online-room.hidden {
   display: none;
 }
@@ -681,4 +682,21 @@ body {
 }
 #select-tab-enemy.hidden {
   display: none;
+}
+
+#online-lan {
+  margin-top: 18px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+}
+#online-lan-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+}
+#online-lan-list li {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 15px;
+  color: #29d9c2;
+  user-select: all;
 }

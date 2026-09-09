@@ -5,12 +5,20 @@ export type NetStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
 
 type Handler<T extends ServerMsg['t']> = (msg: Extract<ServerMsg, { t: T }>) => void;
 
-/** 服务器地址：VITE_WS_URL 覆盖，否则与页面同主机、默认端口 */
+/**
+ * 服务器地址：VITE_WS_URL 覆盖；否则与页面同源的 /ws——
+ * 生产由中继服务器同端口托管页面，开发由 Vite 代理 /ws 到中继，
+ * 这样局域网内任何设备打开页面都自动连到正确的服务器。
+ * 非 http 场景（file://）退回 localhost 默认端口。
+ */
 export function defaultServerUrl(): string {
   const env = (import.meta as unknown as { env?: Record<string, string> }).env;
   if (env?.VITE_WS_URL) return env.VITE_WS_URL;
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.hostname || 'localhost'}:${DEFAULT_PORT}`;
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${location.host}/ws`;
+  }
+  return `ws://localhost:${DEFAULT_PORT}`;
 }
 
 /**
