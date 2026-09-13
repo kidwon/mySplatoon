@@ -700,3 +700,98 @@ body {
   color: #29d9c2;
   user-select: all;
 }
+
+/* ---------- 触屏虚拟操作 ---------- */
+#touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+}
+#touch-controls.hidden {
+  display: none;
+}
+#touch-surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  touch-action: none;
+}
+#touch-stick-base,
+#touch-stick {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+#touch-stick-base {
+  width: 92px;
+  height: 92px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+#touch-stick-base.hidden {
+  display: none;
+}
+#touch-stick {
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+}
+.touch-btn {
+  position: fixed;
+  pointer-events: auto;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 24px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.touch-btn.pressed {
+  background: rgba(41, 217, 194, 0.45);
+  border-color: #29d9c2;
+}
+.touch-fire {
+  right: 24px;
+  bottom: 34px;
+  width: 84px;
+  height: 84px;
+  font-size: 30px;
+}
+.touch-jump {
+  right: 118px;
+  bottom: 92px;
+  width: 60px;
+  height: 60px;
+}
+.touch-squid {
+  right: 24px;
+  bottom: 128px;
+  width: 60px;
+  height: 60px;
+}
+.touch-menu {
+  right: 16px;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+}
+
+/* 触屏设备上 ESC 提示没有意义，用菜单按钮的提示代替 */
+.esc-hint-touch.hidden {
+  display: none;
+}
+body.touch-device .esc-hint-mouse {
+  display: none;
+}
+body.touch-device #controls-hint {
+  display: none;
+}

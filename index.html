@@ -2,12 +2,26 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>My Splatoon — Web MVP</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <canvas id="game-canvas"></canvas>
+
+    <!-- 触屏虚拟操作：左半屏摇杆移动，右半屏拖拽视角，按钮开火/跳跃/潜行/菜单 -->
+    <div id="touch-controls" class="hidden">
+      <div id="touch-surface"></div>
+      <div id="touch-stick-base" class="hidden"></div>
+      <div id="touch-stick"></div>
+      <button id="touch-squid" class="touch-btn touch-squid" aria-label="squid">🦑</button>
+      <button id="touch-jump" class="touch-btn touch-jump" aria-label="jump">⤴</button>
+      <button id="touch-fire" class="touch-btn touch-fire" aria-label="fire">◉</button>
+      <button id="touch-menu" class="touch-btn touch-menu" aria-label="menu">☰</button>
+    </div>
 
     <!-- HUD 覆盖层 -->
     <div id="hud">
@@ -130,7 +144,8 @@
         <h1 data-i18n="online"></h1>
         <div id="enter-countdown" class="hidden"></div>
         <p data-i18n="clickToEnter"></p>
-        <p class="sub" data-i18n="escHintOnline"></p>
+        <p class="sub esc-hint-mouse" data-i18n="escHintOnline"></p>
+        <p class="sub esc-hint-touch hidden" data-i18n="escHintOnlineTouch"></p>
       </div>
     </div>
 
@@ -166,7 +181,8 @@
           <button id="open-online" class="opt-btn" data-i18n="online"></button>
         </div>
         <p data-i18n="clickToStart"></p>
-        <p class="sub" data-i18n="escHint"></p>
+        <p class="sub esc-hint-mouse" data-i18n="escHint"></p>
+        <p class="sub esc-hint-touch hidden" data-i18n="escHintTouch"></p>
       </div>
     </div>
 

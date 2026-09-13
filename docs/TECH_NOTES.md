@@ -315,7 +315,9 @@ Player 与 Bot 的外观接线逻辑（材质克隆/围巾/武器/闪白/淡出�
 2. 特殊武器/大招：涂地攒能量 → 墨爆/护盾/超级跳。
 3. 部署上线：服务器已能同端口托管前端，整体部署到 Fly/Railway 等 Node 主机即可；
   前端若单独放 CDN，以 `VITE_WS_URL=wss://…` 指向中继。
-  手机触屏操作（虚拟摇杆 + 陀螺仪/拖拽视角）是"全设备"真正可玩的前提。
+  ~~手机触屏操作是"全设备"真正可玩的前提~~（虚拟摇杆+拖拽视角+按钮已于
+  v0.7.2 完成，见 §18.2）。后续可做的：视角灵敏度自适应、横屏强制/提示、
+  触屏专属的准星辅助瞄准（触屏精度天然不如鼠标）。
 4. ~~多人联网：WebSocket 房间 + 状态同步 + 延迟补偿~~（1v1 已于 v0.7.0 完成，
   见 §18）。后续：2v2 开放、断线重连、远端弹道预推进、服务端权威仲裁。
 5. 版权注意：ちいかわ角色、电影《牛来》角色（オニザル）、NIKKE 衍生
@@ -393,3 +395,47 @@ Player 与 Bot 的外观接线逻辑（材质克隆/围巾/武器/闪白/淡出�
 **验证**：Node 脚本确认 `/`、`/info`、`/health`、深路径回退与穿越路径都安全返回；
 WebSocket 经 `/ws`、根路径、Vite 代理三条路都拿到 welcome；v0.7.0 的双客户端
 全链路回归在 `/ws` 上全部通过。真机多设备由用户验收。
+
+### 18.2 触屏操作（手机可玩） `v0.7.2`
+
+**问题**：局域网入口做好后手机能打开页面、能进大厅联机，但点"点击进入战场"没反应——
+全部操作都挂在 Pointer Lock 上（`startOverlay`/`enter-overlay` 点击直接
+`canvas.requestPointerLock()`），iOS Safari 不支持这个 API、Android 支持也不稳定，
+调用后既不报错也不触发 `pointerlockchange`，覆盖层永远不消失，`updateSolo`/
+`updateOnline` 也一直卡在"未锁定"分支不跑玩家逻辑。
+
+**现方案**：给 `Input` 加一条不依赖鼠标的第二输入通道，游戏逻辑本身不用改。
+- `Input`：`touchKeys`（与键盘 `keys` 同名字空间，`isDown` 两边都查）、
+  `setTouchKey(code, down)`、`addLookDelta(dx, dy)`（并入 `mouseDX/DY`，
+  与真实 `movementX/Y` 同单位），以及 `touchActive` + `engaged` getter
+  （`pointerLocked || touchActive`，取代所有 `input.pointerLocked` 判断）。
+- `game/TouchControls.ts`（新）：纯手势翻译层，按 `Touch.identifier` 分别
+  跟踪，移动摇杆和视角拖拽可以两指同时进行。落指时 X 坐标在左半屏 → 生成
+  浮动摇杆（跟手指出现，不固定位置），归一化位移超过死区就置位合成的
+  `KeyW/A/S/D`；右半屏拖拽 → 每帧位移累加进 `addLookDelta`。开火/跳跃按钮
+  按住生效、松手即停，和键鼠语义一致；潜行做成**切换**按钮而不是按住——
+  人形态才能开火（见 `updateShooting`），潜行时用不上开火键，但右手拇指
+  同时"按住潜行"又要点开火不方便，切换更适合单手操作。右上角菜单按钮
+  相当于桌面端的 ESC：调用同一个 `releaseControlsUI()`。
+  `TouchControls.supported` 用 `matchMedia('(pointer: coarse)')` 判断是否
+  展示，而不是 UA 嗅探或单纯 `ontouchstart in window`（后者在带触屏的笔记本
+  上也会为真，容易误判）。
+- `main.ts`：`start-overlay`/`enter-overlay` 的点击处理分支——支持触屏就
+  直接 `touchActive = true` 显示虚拟按键并隐藏覆盖层，否则走原来的
+  `requestPointerLock()`；`pointerlockchange` 里"未锁定"的分支、以及触屏
+  菜单按钮，都收口到同一个 `releaseControlsUI()`；`endMatch`/`endOnlineMatch`
+  原来直接调 `document.exitPointerLock()`，改成 `exitControls()` 顺带清空
+  触屏状态，避免结算画面下面虚拟按键还亮着。
+- 视口 meta 加 `maximum-scale=1, user-scalable=no`，避免拖拽视角时触发
+  浏览器捏合缩放/双击缩放；触屏容器 `touch-action: none` + 每个手势事件
+  `preventDefault()` 双重保险防止页面滚动。
+
+**取舍**：摇杆离散映射到与键盘完全相同的四个方向键，没做真正的模拟量
+（推多远都是同一个移动速度）——本作移动本来就是定速的（`BASE_SPEED` 常量），
+模拟量在这个体量下收益很小，换来的是零改动复用 `PlayerController` 里所有
+既有的移动/减速逻辑。视角拖拽增益先按 1:1 抄鼠标 `movementX` 的量级，
+真机手感需要用户自己试后再调 `TouchControls.ts` 里的 `LOOK_GAIN`。
+
+**验证**：`tsc`（client + server）与 `vite build` 通过。真机触屏手势（多指、
+误触边界、iOS/Android 差异）无法在此环境验证，需要用户在手机上实测，
+尤其是视角拖拽的灵敏度。

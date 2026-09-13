@@ -1,19 +1,25 @@
 /**
- * 集中管理键盘 / 鼠标输入状态。
+ * 集中管理键盘 / 鼠标 / 触屏输入状态。
  * 鼠标视角依赖 Pointer Lock：锁定后累计 movementX/Y 供相机消费。
+ * 触屏没有指针锁定这回事：TouchControls 通过 setTouchKey / addLookDelta
+ * 把手势转成和键鼠一样的状态，游戏逻辑（PlayerController）完全不用区分来源。
  */
 export class Input {
   private keys = new Set<string>();
+  /** 触屏虚拟按键（摇杆方向 / 跳跃 / 潜行按钮），与 keys 同名空间，isDown 两边都查 */
+  private touchKeys = new Set<string>();
 
   /** 本帧累计的鼠标位移（消费后清零） */
   mouseDX = 0;
   mouseDY = 0;
 
-  /** 左键是否按住 */
+  /** 左键是否按住（触屏开火按钮也直接写这个字段） */
   firing = false;
 
   /** 鼠标是否已锁定到画布 */
   pointerLocked = false;
+  /** 触屏是否已"进入战场"（对应桌面端指针锁定，由 main.ts 在点击进入覆盖层时置位） */
+  touchActive = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     window.addEventListener('keydown', (e) => {
@@ -50,8 +56,25 @@ export class Input {
     this.canvas.requestPointerLock();
   }
 
+  /** 是否处于"操作中"：桌面指针锁定，或触屏已进入战场 */
+  get engaged() {
+    return this.pointerLocked || this.touchActive;
+  }
+
+  /** 触屏虚拟按键按下/松开，复用与键盘相同的 code（'KeyW' / 'Space' / 'ShiftLeft' …） */
+  setTouchKey(code: string, down: boolean) {
+    if (down) this.touchKeys.add(code);
+    else this.touchKeys.delete(code);
+  }
+
+  /** 触屏拖拽视角：与鼠标累积到同一对字段，不依赖指针锁定 */
+  addLookDelta(dx: number, dy: number) {
+    this.mouseDX += dx;
+    this.mouseDY += dy;
+  }
+
   isDown(code: string): boolean {
-    return this.keys.has(code);
+    return this.keys.has(code) || this.touchKeys.has(code);
   }
 
   get moveForward() {

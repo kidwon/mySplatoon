@@ -8,6 +8,7 @@ import { EnemyBot, BotDifficulty } from './game/EnemyBot';
 import { ModelShowcase } from './game/ModelShowcase';
 import { OnlineSession } from './game/OnlineSession';
 import { Input } from './game/Input';
+import { TouchControls } from './game/TouchControls';
 import { HUD } from './ui/HUD';
 import { Minimap } from './ui/Minimap';
 import { CharacterSelect } from './ui/CharacterSelect';
@@ -28,6 +29,7 @@ class Game {
   private player: PlayerController;
   private bot: EnemyBot;
   private input: Input;
+  private touch: TouchControls;
   private hud: HUD;
   private minimap = new Minimap();
   private showcase!: ModelShowcase;
@@ -72,6 +74,8 @@ class Game {
     );
     this.showcase = new ModelShowcase(this.sceneManager.scene);
     this.input = new Input(canvas);
+    this.touch = new TouchControls(this.input);
+    if (TouchControls.supported) document.body.classList.add('touch-device');
     this.hud = new HUD();
     this.session = new OnlineSession(this.sceneManager.scene, this.inkSystem, this.player);
 
@@ -100,15 +104,27 @@ class Game {
     document.getElementById('hud')!.classList.toggle('hidden', which === 'select');
   }
 
-  /** 开始覆盖层（锁鼠标）与结算覆盖层（重开） */
+  /** 开始覆盖层（锁鼠标/触屏进入战场）与结算覆盖层（重开） */
   private setupOverlays() {
     const startOverlay = document.getElementById('start-overlay')!;
-    const lockPointer = () => {
+    // 桌面端走 Pointer Lock；触屏没有这个 API，直接进战场，
+    // 右上角菜单按钮（touch.onRelease）承担桌面端 ESC 释放指针锁定的角色
+    const engageControls = () => {
       audio.ensureStarted(); // AudioContext 需要用户手势才能启动
-      this.input.requestPointerLock();
+      if (TouchControls.supported) {
+        this.input.touchActive = true;
+        this.touch.show();
+        this.showOverlay(null);
+      } else {
+        this.input.requestPointerLock();
+      }
     };
-    startOverlay.addEventListener('click', lockPointer);
-    document.getElementById('enter-overlay')!.addEventListener('click', lockPointer);
+    startOverlay.addEventListener('click', engageControls);
+    document.getElementById('enter-overlay')!.addEventListener('click', engageControls);
+    this.touch.onRelease = () => {
+      this.input.touchActive = false;
+      this.releaseControlsUI();
+    };
 
     // M 键静音开关
     window.addEventListener('keydown', (e) => {
@@ -192,13 +208,7 @@ class Game {
         this.showOverlay(null);
         return;
       }
-      // 结算界面 / 角色选择页显示期间不弹覆盖层
-      if (this.matchEnded || this.charSelect.active) return;
-      if (this.mode === 'online') {
-        this.showOverlay(this.session.matchActive ? 'enter' : 'online');
-      } else {
-        this.showOverlay('start');
-      }
+      this.releaseControlsUI();
     });
 
     document.getElementById('restart-btn')!.addEventListener('click', () => {
@@ -210,6 +220,27 @@ class Game {
   /** 焦点在文本框里时不响应游戏快捷键 */
   private typingInInput(e: KeyboardEvent) {
     return (e.target as HTMLElement)?.tagName === 'INPUT';
+  }
+
+  /**
+   * 操作被释放后（桌面端指针锁定丢失 / 触屏点了菜单按钮）该弹哪个覆盖层：
+   * 结算界面、角色选择页显示期间不弹；否则按当前模式回到开始页或联机的等待/大厅页。
+   */
+  private releaseControlsUI() {
+    this.touch.hide();
+    if (this.matchEnded || this.charSelect.active) return;
+    if (this.mode === 'online') {
+      this.showOverlay(this.session.matchActive ? 'enter' : 'online');
+    } else {
+      this.showOverlay('start');
+    }
+  }
+
+  /** 对局结束：桌面端解锁鼠标，触屏端一并退出"进入战场"状态并隐藏虚拟按键 */
+  private exitControls() {
+    document.exitPointerLock();
+    this.input.touchActive = false;
+    this.touch.hide();
   }
 
   /** 统一入口：同步机器人参数、开始界面按钮选中态、HUD 徽章 */
@@ -372,7 +403,7 @@ class Game {
     this.matchEnded = true;
     audio.whistle();
     audio.setSwimming(false);
-    document.exitPointerLock();
+    this.exitControls();
     this.hud.showResult(this.inkSystem.getCoverage());
     // exitPointerLock 是异步的，这里显式再藏一次覆盖层
     this.showOverlay(null);
@@ -466,7 +497,7 @@ class Game {
     this.matchEnded = true;
     audio.whistle();
     audio.setSwimming(false);
-    document.exitPointerLock();
+    this.exitControls();
     this.showOverlay(null);
     this.hud.setBanner(reason === 'left' ? t('opponentLeft') : t('waitingResult'));
   }
@@ -484,7 +515,7 @@ class Game {
     const s = this.session;
     const live = s.matchActive && !this.matchEnded;
 
-    if (live && s.playing && this.input.pointerLocked) {
+    if (live && s.playing && this.input.engaged) {
       this.player.update(dt, this.input, this.inkSystem, s.nearestEnemyPos());
     } else {
       audio.setSwimming(false);
@@ -532,7 +563,7 @@ class Game {
 
   /** 单机对局的每帧逻辑 */
   private updateSolo(dt: number) {
-    const active = this.input.pointerLocked && !this.matchEnded;
+    const active = this.input.engaged && !this.matchEnded;
 
     if (active) {
       this.timeLeft -= dt;
